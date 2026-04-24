@@ -4,7 +4,6 @@
 #include <assert.h>
 #include <math.h>
 
-// MyMathUtilityで使われているものと連携
 using namespace KamataEngine;
 
 static const int kColumnWidth = 60;
@@ -28,7 +27,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// ライブラリの初期化
 	Novice::Initialize(kWindowTitle, 1280, 720);
 
-	// キー入力結果を受け取る箱
 	char keys[256] = {0};
 	char preKeys[256] = {0};
 
@@ -45,15 +43,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		/// ↓更新処理ここから
 		///
 
+		Vector3 scale{1.2f, 0.79f, 2.1f};
 		Vector3 rotate{0.4f, 1.43f, -0.8f};
+		Vector3 translate{2.7f, -4.15f, 1.57f};
 
-		// 各軸の回転行列を生成
-		Matrix4x4 rotateXMatrix = MyMathUtility::MakeRotateXMatrix(rotate.x);
-		Matrix4x4 rotateYMatrix = MyMathUtility::MakeRotateYMatrix(rotate.y);
-		Matrix4x4 rotateZMatrix = MyMathUtility::MakeRotateZMatrix(rotate.z);
-
-		// 3つの回転行列を合成 (X * Y * Z)
-		Matrix4x4 rotateXYZMatrix = MyMathUtility::Multiply(rotateXMatrix, MyMathUtility::Multiply(rotateYMatrix, rotateZMatrix));
+		// アフィン変換行列の生成
+		Matrix4x4 worldMatrix = MyMathUtility::MakeAffineMatrix(scale, rotate, translate);
 
 		///
 		/// ↑更新処理ここまで
@@ -63,10 +58,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		/// ↓描画処理ここから
 		///
 
-		MatrixScreenPrintf(0, 0, rotateXMatrix, "rotateXMatrix");
-		MatrixScreenPrintf(0, kRowHeight * 5, rotateYMatrix, "rotateYMatrix");
-		MatrixScreenPrintf(0, kRowHeight * 5 * 2, rotateZMatrix, "rotateZMatrix");
-		MatrixScreenPrintf(0, kRowHeight * 5 * 3, rotateXYZMatrix, "rotateXYZMatrix");
+		MatrixScreenPrintf(0, 0, worldMatrix, "worldMatrix");
 
 		///
 		/// ↑描画処理ここまで

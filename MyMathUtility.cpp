@@ -293,3 +293,20 @@ Matrix4x4 MyMathUtility::MakeRotateZMatrix(float radian) {
 
 	return result;
 }
+
+Matrix4x4 MyMathUtility::MakeAffineMatrix(const Vector3& scale, const Vector3& rotate, const Vector3& translate) {
+	// 1. 各要素の行列を作成
+	Matrix4x4 scaleMatrix = MakeScaleMatrix(scale);
+	Matrix4x4 rotateXMatrix = MakeRotateXMatrix(rotate.x);
+	Matrix4x4 rotateYMatrix = MakeRotateYMatrix(rotate.y);
+	Matrix4x4 rotateZMatrix = MakeRotateZMatrix(rotate.z);
+	Matrix4x4 translateMatrix = MakeTranslateMatrix(translate);
+
+	// 2. 回転行列を合成 (X * Y * Z)
+	Matrix4x4 rotateXYZMatrix = Multiply(rotateXMatrix, Multiply(rotateYMatrix, rotateZMatrix));
+
+	// 3. 拡大縮小 * 回転 * 平行移動 の順で合成 (S * R * T)
+	Matrix4x4 result = Multiply(scaleMatrix, Multiply(rotateXYZMatrix, translateMatrix));
+
+	return result;
+}

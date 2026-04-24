@@ -19,4 +19,6 @@ public:
 	static KamataEngine::Matrix4x4 MakeRotateXMatrix(float radian);
 	static KamataEngine::Matrix4x4 MakeRotateYMatrix(float radian);
 	static KamataEngine::Matrix4x4 MakeRotateZMatrix(float radian);
+
+	static KamataEngine::Matrix4x4 MakeAffineMatrix(const KamataEngine::Vector3& scale, const KamataEngine::Vector3& rotate, const KamataEngine::Vector3& translate);
 };
