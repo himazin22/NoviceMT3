@@ -10,17 +10,7 @@ using namespace KamataEngine;
 static const int kColumnWidth = 60;
 static const int kRowHeight = 20;
 
-
-
-// ベクトルを描画する関数（復活させました）
-void VectorScreenPrintf(int x, int y, const  Vector3& vector, const char* label) {
-	Novice::ScreenPrintf(x, y, "%.02f", vector.x);
-	Novice::ScreenPrintf(x + kColumnWidth, y, "%.02f", vector.y);
-	Novice::ScreenPrintf(x + kColumnWidth * 2, y, "%.02f", vector.z);
-	Novice::ScreenPrintf(x + kColumnWidth * 3, y, "%s", label);
-}
-
-// 行列を描画する関数を追加（4x4の要素を5行分使って描画します）
+// 行列を描画する関数
 void MatrixScreenPrintf(int x, int y, const Matrix4x4& matrix, const char* label) {
 	Novice::ScreenPrintf(x, y, "%s", label);
 	for (int row = 0; row < 4; ++row) {
@@ -42,7 +32,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	char keys[256] = {0};
 	char preKeys[256] = {0};
 
-
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
 		// フレームの開始
@@ -56,15 +45,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		/// ↓更新処理ここから
 		///
 
-		Vector3 translate{4.1f, 2.6f, 0.8f};
-		Vector3 scale{1.5f, 5.2f, 7.3f};
-		Matrix4x4 translateMatrix = MyMathUtility::MakeTranslateMatrix(translate);
-		Matrix4x4 scaleMatrix = MyMathUtility::MakeScaleMatrix(scale);
+		Vector3 rotate{0.4f, 1.43f, -0.8f};
 
-		Vector3 point{2.3f, 3.8f, 1.4f};
-		Matrix4x4 transformMatrix = {1.0f, 2.0f, 3.0f, 4.0f, 3.0f, 1.0f, 1.0f, 2.0f, 1.0f, 4.0f, 2.0f, 3.0f, 2.0f, 2.0f, 1.0f, 3.0f};
+		// 各軸の回転行列を生成
+		Matrix4x4 rotateXMatrix = MyMathUtility::MakeRotateXMatrix(rotate.x);
+		Matrix4x4 rotateYMatrix = MyMathUtility::MakeRotateYMatrix(rotate.y);
+		Matrix4x4 rotateZMatrix = MyMathUtility::MakeRotateZMatrix(rotate.z);
 
-		Vector3 transformed = MyMathUtility::Transform(point, transformMatrix);
+		// 3つの回転行列を合成 (X * Y * Z)
+		Matrix4x4 rotateXYZMatrix = MyMathUtility::Multiply(rotateXMatrix, MyMathUtility::Multiply(rotateYMatrix, rotateZMatrix));
 
 		///
 		/// ↑更新処理ここまで
@@ -74,10 +63,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		/// ↓描画処理ここから
 		///
 
-	
-		VectorScreenPrintf(0, 0, transformed, "transformed");
-		MatrixScreenPrintf(0, kRowHeight, translateMatrix, "translateMatrix");
-		MatrixScreenPrintf(0, kRowHeight * 6, scaleMatrix, "scaleMatrix");
+		MatrixScreenPrintf(0, 0, rotateXMatrix, "rotateXMatrix");
+		MatrixScreenPrintf(0, kRowHeight * 5, rotateYMatrix, "rotateYMatrix");
+		MatrixScreenPrintf(0, kRowHeight * 5 * 2, rotateZMatrix, "rotateZMatrix");
+		MatrixScreenPrintf(0, kRowHeight * 5 * 3, rotateXYZMatrix, "rotateXYZMatrix");
 
 		///
 		/// ↑描画処理ここまで
