@@ -14,4 +14,5 @@ public:
 	static KamataEngine::Matrix4x4 Inverse(const KamataEngine::Matrix4x4& m);
 	static KamataEngine::Matrix4x4 Transpose(const KamataEngine::Matrix4x4& m);
 	static KamataEngine::Matrix4x4 MakeIdentity4x4();
+	static KamataEngine::Vector3 Transform(const KamataEngine::Vector3& vector, const KamataEngine::Matrix4x4& matrix);
 };
