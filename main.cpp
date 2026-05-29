@@ -58,7 +58,7 @@ void DrawGrid(const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMa
 }
 
 void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectMatrix, const Matrix4x4& viewPortMatrix, uint32_t color) {
-	const uint32_t kSubdivision = 45;
+	const uint32_t kSubdivision = 32;
 	const float kLonEvery = 2.0f * float(M_PI) / float(kSubdivision);
 	const float kLatEvery = float(M_PI) / float(kSubdivision);
 
