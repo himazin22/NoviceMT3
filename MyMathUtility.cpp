@@ -348,3 +348,15 @@ Matrix4x4 MyMathUtility::MakeViewportMatrix(float left, float top, float width, 
 	result.m[3][3] = 1.0f;
 	return result;
 }
+
+// 内積の計算
+float MyMathUtility::Dot(const Vector3& v1, const Vector3& v2) { return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z; }
+
+// ベクトルの減算
+Vector3 MyMathUtility::Subtract(const Vector3& v1, const Vector3& v2) { return {v1.x - v2.x, v1.y - v2.y, v1.z - v2.z}; }
+
+// ベクトルの加算
+Vector3 MyMathUtility::Add(const Vector3& v1, const Vector3& v2) { return {v1.x + v2.x, v1.y + v2.y, v1.z + v2.z}; }
+
+// ベクトルの長さの二乗（割る処理の高速化・最適化用）
+float MyMathUtility::LengthSquared(const Vector3& v) { return v.x * v.x + v.y * v.y + v.z * v.z; }

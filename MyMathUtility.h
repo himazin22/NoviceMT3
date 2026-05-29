@@ -25,4 +25,12 @@ public:
 	static KamataEngine::Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip, float farClip);
 	static KamataEngine::Matrix4x4 MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearClip, float farClip);
 	static KamataEngine::Matrix4x4 MakeViewportMatrix(float left, float top, float width, float height, float minDepth, float maxDepth);
+	// 内積
+	static float Dot(const KamataEngine::Vector3& v1, const KamataEngine::Vector3& v2);
+	// ベクトルの減算
+	static KamataEngine::Vector3 Subtract(const KamataEngine::Vector3& v1, const KamataEngine::Vector3& v2);
+	// ベクトルの加算
+	static KamataEngine::Vector3 Add(const KamataEngine::Vector3& v1, const KamataEngine::Vector3& v2);
+	// ベクトルの長さの二乗
+	static float LengthSquared(const KamataEngine::Vector3& v);
 };

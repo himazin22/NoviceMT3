@@ -2,6 +2,7 @@
 #define _USE_MATH_DEFINES
 #include "MyMathUtility.h"
 #include <assert.h>
+#include <algorithm>
 #include <imgui.h>
 #include <math.h>
 
@@ -14,6 +15,74 @@ struct Sphere {
 	Vector3 center;
 	float radius;
 };
+
+struct Segment {
+	Vector3 origin;
+	Vector3 diff;
+};
+
+// --- 正射影ベクトルを求める関数 ---
+Vector3 Project(const Vector3& v1, const Vector3& v2) {
+	float lengthSq = MyMathUtility::LengthSquared(v2);
+	if (lengthSq == 0.0f) {
+		return {0.0f, 0.0f, 0.0f};
+	}
+	float t = MyMathUtility::Dot(v1, v2) / lengthSq;
+	return {v2.x * t, v2.y * t, v2.z * t};
+}
+
+// --- 点から線分への最近接点を求める関数 ---
+Vector3 ClosestPoint(const Vector3& point, const Segment& segment) {
+	Vector3 v1 = MyMathUtility::Subtract(point, segment.origin);
+	float lengthSq = MyMathUtility::LengthSquared(segment.diff);
+	float t = 0.0f;
+	if (lengthSq != 0.0f) {
+		t = MyMathUtility::Dot(v1, segment.diff) / lengthSq;
+	}
+	// 線分のため 0.0f ～ 1.0f の範囲に制限（クランプ）する
+	t = std::clamp(t, 0.0f, 1.0f);
+
+	Vector3 result = {segment.origin.x + segment.diff.x * t, segment.origin.y + segment.diff.y * t, segment.origin.z + segment.diff.z * t};
+	return result;
+}
+
+// --- 大量のライン消費によるアサートエラーを防ぐための軽量な点描画関数 ---
+void DrawCustomPoint(const Vector3& point, float size, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
+	// 点を中心にひし形（8面体）のワイヤーフレームを定義
+	Vector3 vertices[6] = {
+	    {point.x + size, point.y,        point.z       },
+        {point.x - size, point.y,        point.z       },
+        {point.x,        point.y + size, point.z       },
+	    {point.x,        point.y - size, point.z       },
+        {point.x,        point.y,        point.z + size},
+        {point.x,        point.y,        point.z - size}
+    };
+
+	Vector3 screenPoints[6];
+	for (int i = 0; i < 6; ++i) {
+		screenPoints[i] = MyMathUtility::Transform(MyMathUtility::Transform(vertices[i], viewProjectionMatrix), viewportMatrix);
+	}
+
+	// 12本のラインで点の立体的な目印を綺麗に描画
+	int indices[12][2] = {
+	    {0, 2},
+        {2, 1},
+        {1, 3},
+        {3, 0},
+        {0, 4},
+        {1, 4},
+        {2, 4},
+        {3, 4},
+        {0, 5},
+        {1, 5},
+        {2, 5},
+        {3, 5}
+    };
+
+	for (int i = 0; i < 12; ++i) {
+		Novice::DrawLine(int(screenPoints[indices[i][0]].x), int(screenPoints[indices[i][0]].y), int(screenPoints[indices[i][1]].x), int(screenPoints[indices[i][1]].y), color);
+	}
+}
 
 void DrawGrid(const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix) {
 
@@ -92,17 +161,6 @@ void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectMatrix, const 
 	}
 }
 
-// --- クロス積の実装 ---
-//Vector3 Cross(const Vector3& v1, const Vector3& v2) {
-//	Vector3 result;
-//	result.x = v1.y * v2.z - v1.z * v2.y;
-//	result.y = v1.z * v2.x - v1.x * v2.z;
-//	result.z = v1.x * v2.y - v1.y * v2.x;
-//	return result;
-//}
-
-// --- ベクトルを描画する関数 ---
-//void VectorScreenPrintf(int x, int y, const Vector3& vector, const char* label) { Novice::ScreenPrintf(x, y, "%.02f %.02f %.02f %s", vector.x, vector.y, vector.z, label); }
 
 const char kWindowTitle[] = "LC1C_22_ツノダ_タケマサ_タイトル";
 
@@ -115,13 +173,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	char keys[256] = {0};
 	char preKeys[256] = {0};
 
-	Vector3 cameraTranslate{0.0f, 1.9f, -6.49f};
-	Vector3 cameraRotate{0.26f, 0.0f, -0.0f};
+	Vector3 cameraTranslate{0.0f, 2.5f, -6.0f};
+	Vector3 cameraRotate{0.35f, 0.0f, 0.0f};
 
-	// 今回描画する球体の初期化
-	Sphere sphere;
-	sphere.center = {0.0f, 0.0f, 0.0f};
-	sphere.radius = 0.73f;
+	Segment segment{
+	    {-2.0f, -1.0f, 0.0f},
+        {3.0f,  2.0f,  2.0f}
+    };
+	Vector3 point{-1.5f, 0.6f, 0.6f};
+	
+	//Sphere sphere;
+	//sphere.center = {0.0f, 0.0f, 0.0f};
+	//sphere.radius = 0.73f;
 	
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
@@ -136,12 +199,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		/// ↓更新処理ここから
 		///
 		
+		// 毎フレーム計算を行う
+		Vector3 project = Project(MyMathUtility::Subtract(point, segment.origin), segment.diff);
+		Vector3 closestPoint = ClosestPoint(point, segment);
+
 		// ImGuiウィンドウの表示とパラメータ更新処理
 		ImGui::Begin("Window");
-		ImGui::DragFloat3("CameraTranslate", &cameraTranslate.x, 0.01f);
-		ImGui::DragFloat3("CameraRotate", &cameraRotate.x, 0.01f);
-		ImGui::DragFloat3("SphereCenter", &sphere.center.x, 0.01f);
-		ImGui::DragFloat("SphereRadius", &sphere.radius, 0.01f);
+		ImGui::DragFloat3("Point", &point.x, 0.01f);
+		ImGui::DragFloat3("Segment origin", &segment.origin.x, 0.01f);
+		ImGui::DragFloat3("Segment diff", &segment.diff.x, 0.01f);
+		ImGui::InputFloat3("Project", &project.x, "%.3f", ImGuiInputTextFlags_ReadOnly);
 		ImGui::End();
 		
 		///
@@ -152,23 +219,25 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		/// ↓描画処理ここから
 		///
 
-		// --- 3D描画処理 ---
-		// カメラ行列・ビュー行列の作成（ImGuiで調整した値を使用）
 		Matrix4x4 cameraMatrix = MyMathUtility::MakeAffineMatrix({1.0f, 1.0f, 1.0f}, cameraRotate, cameraTranslate);
 		Matrix4x4 viewMatrix = MyMathUtility::Inverse(cameraMatrix);
 
-		// 透視投影行列とビュープロジェクション行列の作成
 		Matrix4x4 projectionMatrix = MyMathUtility::MakePerspectiveFovMatrix(0.45f, float(kWindowWidth) / float(kWindowHeight), 0.1f, 100.0f);
 		Matrix4x4 viewProjectionMatrix = MyMathUtility::Multiply(viewMatrix, projectionMatrix);
 
-		// スクリーン空間へマッピングするためのビューポート行列
 		Matrix4x4 viewportMatrix = MyMathUtility::MakeViewportMatrix(0, 0, float(kWindowWidth), float(kWindowHeight), 0.0f, 1.0f);
 
-		// 床のグリッドを描画
+		// 1. 床グリッド描画
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
-		// 球体を描画（実装イメージに合わせて黒色のワイヤーフレーム）
-		DrawSphere(sphere, viewProjectionMatrix, viewportMatrix, BLACK);
+		// 2. 線分の描画（白色）
+		Vector3 start = MyMathUtility::Transform(MyMathUtility::Transform(segment.origin, viewProjectionMatrix), viewportMatrix);
+		Vector3 end = MyMathUtility::Transform(MyMathUtility::Transform(MyMathUtility::Add(segment.origin, segment.diff), viewProjectionMatrix), viewportMatrix);
+		Novice::DrawLine(int(start.x), int(start.y), int(end.x), int(end.y), WHITE);
+
+		// 3. 元の点を「赤(RED)」、最近接点を「黒(BLACK)」で安全に目印として描画
+		DrawCustomPoint(point, 0.04f, viewProjectionMatrix, viewportMatrix, RED);
+		DrawCustomPoint(closestPoint, 0.04f, viewProjectionMatrix, viewportMatrix, BLACK);
 
 		///
 		/// ↑描画処理ここまで
