@@ -1,8 +1,8 @@
 #include <Novice.h>
 #define _USE_MATH_DEFINES
 #include "MyMathUtility.h"
-#include <assert.h>
 #include <algorithm>
+#include <assert.h>
 #include <imgui.h>
 #include <math.h>
 
@@ -46,41 +46,32 @@ Vector3 ClosestPoint(const Vector3& point, const Segment& segment) {
 	return result;
 }
 
-// --- 大量のライン消費によるアサートエラーを防ぐための軽量な点描画関数 ---
-void DrawCustomPoint(const Vector3& point, float size, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
-	// 点を中心にひし形（8面体）のワイヤーフレームを定義
-	Vector3 vertices[6] = {
-	    {point.x + size, point.y,        point.z       },
-        {point.x - size, point.y,        point.z       },
-        {point.x,        point.y + size, point.z       },
-	    {point.x,        point.y - size, point.z       },
-        {point.x,        point.y,        point.z + size},
-        {point.x,        point.y,        point.z - size}
-    };
+// --- 点を表現するために分割数を大幅に抑えた軽量な球体描画関数（アサート対策） ---
+void DrawMiniSphere(const Sphere& sphere, const Matrix4x4& viewProjectMatrix, const Matrix4x4& viewPortMatrix, uint32_t color) {
+	const uint32_t kSubdivision = 8; // 分割数を32から8に落とし、ライン消費を1/16に激減させる
+	const float kLonEvery = 2.0f * float(M_PI) / float(kSubdivision);
+	const float kLatEvery = float(M_PI) / float(kSubdivision);
 
-	Vector3 screenPoints[6];
-	for (int i = 0; i < 6; ++i) {
-		screenPoints[i] = MyMathUtility::Transform(MyMathUtility::Transform(vertices[i], viewProjectionMatrix), viewportMatrix);
-	}
+	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex) {
+		float lat = -float(M_PI) / 2.0f + kLatEvery * latIndex;
+		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
 
-	// 12本のラインで点の立体的な目印を綺麗に描画
-	int indices[12][2] = {
-	    {0, 2},
-        {2, 1},
-        {1, 3},
-        {3, 0},
-        {0, 4},
-        {1, 4},
-        {2, 4},
-        {3, 4},
-        {0, 5},
-        {1, 5},
-        {2, 5},
-        {3, 5}
-    };
+			float lon = lonIndex * kLonEvery;
+			Vector3 a = {sphere.radius * cosf(lat) * cosf(lon) + sphere.center.x, sphere.radius * sinf(lat) + sphere.center.y, sphere.radius * cosf(lat) * sinf(lon) + sphere.center.z};
 
-	for (int i = 0; i < 12; ++i) {
-		Novice::DrawLine(int(screenPoints[indices[i][0]].x), int(screenPoints[indices[i][0]].y), int(screenPoints[indices[i][1]].x), int(screenPoints[indices[i][1]].y), color);
+			float nextLat = lat + kLatEvery;
+			Vector3 b = {sphere.radius * cosf(nextLat) * cosf(lon) + sphere.center.x, sphere.radius * sinf(nextLat) + sphere.center.y, sphere.radius * cosf(nextLat) * sinf(lon) + sphere.center.z};
+
+			float nextLon = lon + kLonEvery;
+			Vector3 c = {sphere.radius * cosf(lat) * cosf(nextLon) + sphere.center.x, sphere.radius * sinf(lat) + sphere.center.y, sphere.radius * cosf(lat) * sinf(nextLon) + sphere.center.z};
+
+			Vector3 screenA = MyMathUtility::Transform(MyMathUtility::Transform(a, viewProjectMatrix), viewPortMatrix);
+			Vector3 screenB = MyMathUtility::Transform(MyMathUtility::Transform(b, viewProjectMatrix), viewPortMatrix);
+			Vector3 screenC = MyMathUtility::Transform(MyMathUtility::Transform(c, viewProjectMatrix), viewPortMatrix);
+
+			Novice::DrawLine(int(screenA.x), int(screenA.y), int(screenB.x), int(screenB.y), color);
+			Novice::DrawLine(int(screenA.x), int(screenA.y), int(screenC.x), int(screenC.y), color);
+		}
 	}
 }
 
@@ -161,7 +152,6 @@ void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectMatrix, const 
 	}
 }
 
-
 const char kWindowTitle[] = "LC1C_22_ツノダ_タケマサ_タイトル";
 
 // Windowsアプリでのエントリーポイント(main関数)
@@ -181,11 +171,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
         {3.0f,  2.0f,  2.0f}
     };
 	Vector3 point{-1.5f, 0.6f, 0.6f};
-	
-	//Sphere sphere;
-	//sphere.center = {0.0f, 0.0f, 0.0f};
-	//sphere.radius = 0.73f;
-	
+
+	// Sphere sphere;
+	// sphere.center = {0.0f, 0.0f, 0.0f};
+	// sphere.radius = 0.73f;
+
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
 		// フレームの開始
@@ -198,7 +188,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		///
 		/// ↓更新処理ここから
 		///
-		
+
 		// 毎フレーム計算を行う
 		Vector3 project = Project(MyMathUtility::Subtract(point, segment.origin), segment.diff);
 		Vector3 closestPoint = ClosestPoint(point, segment);
@@ -210,7 +200,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		ImGui::DragFloat3("Segment diff", &segment.diff.x, 0.01f);
 		ImGui::InputFloat3("Project", &project.x, "%.3f", ImGuiInputTextFlags_ReadOnly);
 		ImGui::End();
-		
+
 		///
 		/// ↑更新処理ここまで
 		///
@@ -235,9 +225,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		Vector3 end = MyMathUtility::Transform(MyMathUtility::Transform(MyMathUtility::Add(segment.origin, segment.diff), viewProjectionMatrix), viewportMatrix);
 		Novice::DrawLine(int(start.x), int(start.y), int(end.x), int(end.y), WHITE);
 
-		// 3. 元の点を「赤(RED)」、最近接点を「黒(BLACK)」で安全に目印として描画
-		DrawCustomPoint(point, 0.04f, viewProjectionMatrix, viewportMatrix, RED);
-		DrawCustomPoint(closestPoint, 0.04f, viewProjectionMatrix, viewportMatrix, BLACK);
+		// 2. 元の点を「赤(RED)」の軽量球体として描画 (半径0.08f程度にすると画面で見やすくなります)
+		Sphere pointSphere{point, 0.01f};
+		DrawMiniSphere(pointSphere, viewProjectionMatrix, viewportMatrix, RED);
+
+		// 3. 最近接点を「黒(BLACK)」の軽量球体として描画
+		Sphere closestPointSphere{closestPoint, 0.01f};
+		DrawMiniSphere(closestPointSphere, viewProjectionMatrix, viewportMatrix, BLACK);
 
 		///
 		/// ↑描画処理ここまで
