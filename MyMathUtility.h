@@ -44,4 +44,7 @@ public:
 	static KamataEngine::Vector3 Project(const KamataEngine::Vector3& v1, const KamataEngine::Vector3& v2);
 	// 最近接点
 	static KamataEngine::Vector3 ClosestPoint(const KamataEngine::Vector3& point, const Segment& segment);
+
+	// ベクトルの長さを求める
+	static float Length(const KamataEngine::Vector3& v);
 };

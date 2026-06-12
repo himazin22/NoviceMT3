@@ -16,9 +16,18 @@ struct Sphere {
 	float radius;
 };
 
-// --- 点を表現するために分割数を大幅に抑えた軽量な球体描画関数 ---
+// 球と球の衝突判定関数
+bool IsCollision(const Sphere& s1, const Sphere& s2) {
+	float distance = MyMathUtility::Length(MyMathUtility::Subtract(s2.center, s1.center));
+	if (distance <= (s1.radius + s2.radius)) {
+		return true;
+	}
+	return false;
+}
+
+// 軽量な球体描画関数
 void DrawMiniSphere(const Sphere& sphere, const Matrix4x4& viewProjectMatrix, const Matrix4x4& viewPortMatrix, uint32_t color) {
-	const uint32_t kSubdivision = 8;
+	const uint32_t kSubdivision = 12;
 	const float kLonEvery = 2.0f * float(M_PI) / float(kSubdivision);
 	const float kLatEvery = float(M_PI) / float(kSubdivision);
 
@@ -45,8 +54,9 @@ void DrawMiniSphere(const Sphere& sphere, const Matrix4x4& viewProjectMatrix, co
 	}
 }
 
+// 床グリッド描画関数
 void DrawGrid(const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix) {
-	const float kGridHalfWidth = 2.0f;
+	const float kGridHalfWidth = 5.0f;
 	const uint32_t kSubdivision = 10;
 	const float kGridEvery = (kGridHalfWidth * 2.0f) / float(kSubdivision);
 
@@ -89,15 +99,28 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	char keys[256] = {0};
 	char preKeys[256] = {0};
 
-	Vector3 cameraTranslate{0.0f, 2.5f, -6.0f};
-	Vector3 cameraRotate{0.35f, 0.0f, 0.0f};
+	// マウス位置保持用
+	int currentMouseX = 0;
+	int currentMouseY = 0;
+	int prevMouseX = 0;
+	int prevMouseY = 0;
+	bool isFirstClick = true;
 
-	// MyMathUtility.h の Segment 構造体を使用
-	Segment segment{
-	    {-2.0f, -1.0f, 0.0f},
-        {3.0f,  2.0f,  2.0f}
+	// デバッグカメラ用の初期位置
+	Vector3 cameraTranslate{0.0f, 4.0f, -10.0f};
+	Vector3 cameraRotate{0.45f, 0.0f, 0.0f};
+	float cameraSpeed = 0.08f;
+	float mouseSensitivity = 0.005f; // マウスの感度調整
+
+	// 2つの球体の初期化
+	Sphere sphere1{
+	    {-1.0f, 0.5f, 0.0f},
+        0.5f
     };
-	Vector3 point{-1.5f, 0.6f, 0.6f};
+	Sphere sphere2{
+	    {1.0f, 0.5f, 0.0f},
+        0.4f
+    };
 
 	while (Novice::ProcessMessage() == 0) {
 		Novice::BeginFrame();
@@ -105,17 +128,100 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		memcpy(preKeys, keys, 256);
 		Novice::GetHitKeyStateAll(keys);
 
-		// クラス内の静的関数から計算を呼び出し
-		Vector3 project = MyMathUtility::Project(MyMathUtility::Subtract(point, segment.origin), segment.diff);
-		Vector3 closestPoint = MyMathUtility::ClosestPoint(point, segment);
+		// マウス位置の更新
+		prevMouseX = currentMouseX;
+		prevMouseY = currentMouseY;
+		Novice::GetMousePosition(&currentMouseX, &currentMouseY);
 
-		ImGui::Begin("Window");
-		ImGui::DragFloat3("Point", &point.x, 0.01f);
-		ImGui::DragFloat3("Segment origin", &segment.origin.x, 0.01f);
-		ImGui::DragFloat3("Segment diff", &segment.diff.x, 0.01f);
-		ImGui::InputFloat3("Project", &project.x, "%.3f", ImGuiInputTextFlags_ReadOnly);
+		// ==================================================
+		// 🛠️ FPSスタイル・デバッグカメラ操作 (WASD + マウス)
+		// ==================================================
+
+		// 1. マウスの右クリックドラッグによる視点変更
+		// // 1 = 右クリック
+		if (Novice::IsPressMouse(1)) { 
+			if (isFirstClick) {
+				// クリックした瞬間は移動量を0にする
+				isFirstClick = false;
+			} else {
+				float deltaX = float(currentMouseX - prevMouseX);
+				float deltaY = float(currentMouseY - prevMouseY);
+
+				cameraRotate.y += deltaX * mouseSensitivity;
+				cameraRotate.x += deltaY * mouseSensitivity;
+
+				// カメラが逆さまにならないように制限
+				cameraRotate.x = std::clamp(cameraRotate.x, -float(M_PI) / 2.1f, float(M_PI) / 2.1f);
+			}
+		} else {
+			isFirstClick = true;
+		}
+
+		// カメラの向き（回転）を基準にした移動ベクトルの計算
+		Matrix4x4 rotationMatrix = MyMathUtility::Multiply(MyMathUtility::MakeRotateXMatrix(cameraRotate.x), MyMathUtility::MakeRotateYMatrix(cameraRotate.y));
+
+		Vector3 moveDir = {0.0f, 0.0f, 0.0f};
+		if (keys[DIK_W])
+			moveDir.z += 1.0f;
+		if (keys[DIK_S])
+			moveDir.z -= 1.0f;
+		if (keys[DIK_D])
+			moveDir.x += 1.0f;
+		if (keys[DIK_A])
+			moveDir.x -= 1.0f;
+
+		// 向いている方向に合わせてカメラ位置を移動
+		if (moveDir.x != 0.0f || moveDir.z != 0.0f) {
+			Vector3 transformedDir = MyMathUtility::Transform(moveDir, rotationMatrix);
+			cameraTranslate.x += transformedDir.x * cameraSpeed;
+			cameraTranslate.y += transformedDir.y * cameraSpeed;
+			cameraTranslate.z += transformedDir.z * cameraSpeed;
+		}
+
+		// 上下上昇キー（これはワールド座標基準のほうが操作しやすいので独立）
+		if (keys[DIK_SPACE])
+			cameraTranslate.y += cameraSpeed;
+		if (keys[DIK_LSHIFT])
+			cameraTranslate.y -= cameraSpeed;
+
+		// リセットキー
+		if (keys[DIK_R]) {
+			cameraTranslate = {0.0f, 4.0f, -10.0f};
+			cameraRotate = {0.45f, 0.0f, 0.0f};
+		}
+
+		// --- ImGui ウィンドウ ---
+		ImGui::Begin("Debug Window");
+
+		ImGui::Text("--- Camera Controls ---");
+		ImGui::Text("Move: [W][A][S][D]");
+		ImGui::Text("Look Around: [Right Click + Drag]");
+		ImGui::Text("Up/Down: [Space] / [LShift]");
+		ImGui::Text("Reset View: Press [R]");
+
+		ImGui::Separator();
+
+		ImGui::Text("--- Sphere Settings ---");
+		ImGui::Text("Sphere 1 (White)");
+		ImGui::DragFloat3("Center 1", &sphere1.center.x, 0.02f);
+		ImGui::DragFloat("Radius 1", &sphere1.radius, 0.01f, 0.01f, 5.0f);
+
+		ImGui::Text("Sphere 2 (Changes Color)");
+		ImGui::DragFloat3("Center 2", &sphere2.center.x, 0.02f);
+		ImGui::DragFloat("Radius 2", &sphere2.radius, 0.01f, 0.01f, 5.0f);
+
+		ImGui::Separator();
+
+		bool colliding = IsCollision(sphere1, sphere2);
+		if (colliding) {
+			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "STATUS: COLLISION!");
+		} else {
+			ImGui::Text("STATUS: No Collision");
+		}
+
 		ImGui::End();
 
+		// ビュー・プロジェクション計算
 		Matrix4x4 cameraMatrix = MyMathUtility::MakeAffineMatrix({1.0f, 1.0f, 1.0f}, cameraRotate, cameraTranslate);
 		Matrix4x4 viewMatrix = MyMathUtility::Inverse(cameraMatrix);
 
@@ -124,21 +230,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		Matrix4x4 viewportMatrix = MyMathUtility::MakeViewportMatrix(0, 0, float(kWindowWidth), float(kWindowHeight), 0.0f, 1.0f);
 
-		// 床グリッド描画
+		// 描画
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
-		// 線分の描画（白色）
-		Vector3 start = MyMathUtility::Transform(MyMathUtility::Transform(segment.origin, viewProjectionMatrix), viewportMatrix);
-		Vector3 end = MyMathUtility::Transform(MyMathUtility::Transform(MyMathUtility::Add(segment.origin, segment.diff), viewProjectionMatrix), viewportMatrix);
-		Novice::DrawLine(int(start.x), int(start.y), int(end.x), int(end.y), WHITE);
+		uint32_t sphere1Color = WHITE;
+		uint32_t sphere2Color = colliding ? RED : WHITE;
 
-		// 元の点を 赤(RED) で描画
-		Sphere pointSphere{point, 0.08f};
-		DrawMiniSphere(pointSphere, viewProjectionMatrix, viewportMatrix, RED);
-
-		// 最近接点を 黒(BLACK) で描画
-		Sphere closestPointSphere{closestPoint, 0.08f};
-		DrawMiniSphere(closestPointSphere, viewProjectionMatrix, viewportMatrix, BLACK);
+		DrawMiniSphere(sphere1, viewProjectionMatrix, viewportMatrix, sphere1Color);
+		DrawMiniSphere(sphere2, viewProjectionMatrix, viewportMatrix, sphere2Color);
 
 		Novice::EndFrame();
 
