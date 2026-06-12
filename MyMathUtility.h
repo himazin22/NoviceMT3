@@ -1,6 +1,12 @@
 #pragma once
 #include "KamataEngine.h"
 
+// 線分を表す構造体（クラスの外、グローバル空間に定義します）
+struct Segment {
+	KamataEngine::Vector3 origin;
+	KamataEngine::Vector3 diff;
+};
+
 // 名前が被らないように MyMathUtility に変更
 class MyMathUtility {
 public:
@@ -33,4 +39,9 @@ public:
 	static KamataEngine::Vector3 Add(const KamataEngine::Vector3& v1, const KamataEngine::Vector3& v2);
 	// ベクトルの長さの二乗
 	static float LengthSquared(const KamataEngine::Vector3& v);
+
+	// 正射影ベクトル
+	static KamataEngine::Vector3 Project(const KamataEngine::Vector3& v1, const KamataEngine::Vector3& v2);
+	// 最近接点
+	static KamataEngine::Vector3 ClosestPoint(const KamataEngine::Vector3& point, const Segment& segment);
 };

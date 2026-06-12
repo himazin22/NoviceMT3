@@ -1,6 +1,6 @@
 #include "MyMathUtility.h" // 変更
 #include <cmath>
-
+#include <algorithm>
 using namespace KamataEngine;
 
 // ※中身の計算式は変更していません。MathUtility:: を MyMathUtility:: にしただけです。
@@ -360,3 +360,26 @@ Vector3 MyMathUtility::Add(const Vector3& v1, const Vector3& v2) { return {v1.x 
 
 // ベクトルの長さの二乗（割る処理の高速化・最適化用）
 float MyMathUtility::LengthSquared(const Vector3& v) { return v.x * v.x + v.y * v.y + v.z * v.z; }
+
+// 正射影ベクトルを求める
+Vector3 MyMathUtility::Project(const Vector3& v1, const Vector3& v2) {
+	float lengthSq = LengthSquared(v2);
+	if (lengthSq == 0.0f) {
+		return {0.0f, 0.0f, 0.0f};
+	}
+	float t = Dot(v1, v2) / lengthSq;
+	return {v2.x * t, v2.y * t, v2.z * t};
+}
+
+// 点から線分への最近接点を求める
+Vector3 MyMathUtility::ClosestPoint(const Vector3& point, const Segment& segment) {
+	Vector3 v1 = Subtract(point, segment.origin);
+	float lengthSq = LengthSquared(segment.diff);
+	float t = 0.0f;
+	if (lengthSq != 0.0f) {
+		t = Dot(v1, segment.diff) / lengthSq;
+	}
+	t = std::clamp(t, 0.0f, 1.0f); // 線分なので0～1の範囲に制限
+
+	return {segment.origin.x + segment.diff.x * t, segment.origin.y + segment.diff.y * t, segment.origin.z + segment.diff.z * t};
+}
