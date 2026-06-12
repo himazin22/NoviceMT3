@@ -21,7 +21,10 @@ struct Plane {
 	float distance;
 };
 
-// ★注意: 'Segment' 構造体は MyMathUtility.h で定義されているため、ここでは定義しません。
+struct Triangle {
+	Vector3 Vvertices[3];
+};
+
 
 // 球と球の衝突判定関数
 bool IsCollision(const Sphere& s1, const Sphere& s2) {
@@ -65,6 +68,73 @@ bool IsCollision(const Segment& segment, const Plane& plane) {
 	}
 
 	return false;
+}
+
+// 三角形と線分の衝突判定関数
+bool IsCollision(const Triangle& triangle, const Segment& segment) {
+	// 1. 三角形の各頂点を取り出す
+	Vector3 v0 = triangle.Vvertices[0];
+	Vector3 v1 = triangle.Vvertices[1];
+	Vector3 v2 = triangle.Vvertices[2];
+
+	// 各辺のベクトル
+	Vector3 v01 = MyMathUtility::Subtract(v1, v0);
+	Vector3 v12 = MyMathUtility::Subtract(v2, v1);
+	Vector3 v20 = MyMathUtility::Subtract(v0, v2);
+
+	// 2. 三角形がなす平面の法線と距離を計算
+	Vector3 v02 = MyMathUtility::Subtract(v2, v0);
+	Vector3 normal = MyMathUtility::Normalize(MyMathUtility::Cross(v01, v02));
+	float distance = MyMathUtility::Dot(normal, v0);
+
+	// 3. 線分と平面の交点(p)を求める
+	float dot = MyMathUtility::Dot(normal, segment.diff);
+
+	// 平行である場合は衝突しない（分母が0になるのを防ぐ）
+	if (dot == 0.0f) {
+		return false;
+	}
+
+	// 比率 t を求める
+	float t = (distance - MyMathUtility::Dot(segment.origin, normal)) / dot;
+
+	// t の値が 0.0f ～ 1.0f の範囲に外れていれば、線分の範囲内で衝突していない
+	if (t < 0.0f || t > 1.0f) {
+		return false;
+	}
+
+	// 衝突点 p を計算
+	Vector3 p = MyMathUtility::Add(segment.origin, MyMathUtility::Multiply(t, segment.diff));
+
+	// 4. 交点 p が三角形の内側にあるかを判定（資料の擬似コードより）
+	Vector3 v0p = MyMathUtility::Subtract(p, v0);
+	Vector3 v1p = MyMathUtility::Subtract(p, v1);
+	Vector3 v2p = MyMathUtility::Subtract(p, v2);
+
+	Vector3 cross01 = MyMathUtility::Cross(v01, v1p);
+	Vector3 cross12 = MyMathUtility::Cross(v12, v2p);
+	Vector3 cross20 = MyMathUtility::Cross(v20, v0p);
+
+	// すべての小三角形のクロス積と法線が同じ方向を向いていたら衝突
+	if (MyMathUtility::Dot(cross01, normal) >= 0.0f && MyMathUtility::Dot(cross12, normal) >= 0.0f && MyMathUtility::Dot(cross20, normal) >= 0.0f) {
+		return true;
+	}
+
+	return false;
+}
+
+// 三角形の描画関数
+void DrawTriangle(const Triangle& triangle, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
+	Vector3 screenVertices[3];
+	for (int i = 0; i < 3; ++i) {
+		// 3次元座標をスクリーン座標系まで変換
+		Vector3 ndc = MyMathUtility::Transform(triangle.Vvertices[i], viewProjectionMatrix);
+		screenVertices[i] = MyMathUtility::Transform(ndc, viewportMatrix);
+	}
+
+	// Novice::DrawTriangle を利用してワイヤーフレームで描画
+	Novice::DrawTriangle(
+	    int(screenVertices[0].x), int(screenVertices[0].y), int(screenVertices[1].x), int(screenVertices[1].y), int(screenVertices[2].x), int(screenVertices[2].y), color, kFillModeWireFrame);
 }
 
 // 線分の描画関数
@@ -203,14 +273,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	float cameraSpeed = 0.08f;
 	float mouseSensitivity = 0.005f; // マウスの感度調整
 
-	// 線分と平面の初期化
+	// 線分と三角形の初期化
 	Segment segment = {
-	    {-0.5f, 0.5f, 0.0f}, // 始点 (Origin)
-	    {1.0f,  1.0f, 0.0f}  // 終点への差分ベクトル (Diff)
+	    {0.44f, 0.42f, -1.99f}, // 始点 (Origin)
+	    {0.0f,  0.5f,  2.0f  }  // 差分ベクトル (Diff)
 	};
-	Plane plane = {
-	    {0.0f, 1.0f, 0.0f},
-        0.0f
+
+	Triangle triangle = {
+	    {
+         {-1.0f, 0.0f, 0.0f}, // v0
+	        {0.0f, 1.0f, 0.0f},  // v1
+	        {1.0f, 0.0f, 0.0f}   // v2
+	    }
     };
 
 	while (Novice::ProcessMessage() == 0) {
@@ -277,7 +351,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// ===================================
 		// ImGui の処理
 		// ===================================
-		ImGui::Begin("Segment vs Plane Collision");
+		ImGui::Begin("Triangle vs Segment Collision");
+
+		ImGui::Text("--- Triangle ---");
+		ImGui::DragFloat3("Triangle.v0", &triangle.Vvertices[0].x, 0.02f);
+		ImGui::DragFloat3("Triangle.v1", &triangle.Vvertices[1].x, 0.02f);
+		ImGui::DragFloat3("Triangle.v2", &triangle.Vvertices[2].x, 0.02f);
+
+		ImGui::Separator();
 
 		ImGui::Text("--- Segment ---");
 		ImGui::DragFloat3("Segment Origin", &segment.origin.x, 0.02f);
@@ -285,16 +366,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		ImGui::Separator();
 
-		ImGui::Text("--- Plane ---");
-		if (ImGui::DragFloat3("Plane Normal", &plane.normal.x, 0.01f, -1.0f, 1.0f)) {
-			plane.normal = MyMathUtility::Normalize(plane.normal);
-		}
-		ImGui::DragFloat("Plane Distance", &plane.distance, 0.02f);
-
-		ImGui::Separator();
-
 		// 衝突判定
-		bool colliding = IsCollision(segment, plane);
+		bool colliding = IsCollision(triangle, segment);
 		if (colliding) {
 			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "STATUS: HIT!!");
 		} else {
@@ -318,9 +391,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 当たっていたら赤、当たっていなければ白
 		uint32_t segmentColor = colliding ? RED : WHITE;
 
-		// 線分と平面の描画
+		// 線分と三角形の描画
 		DrawSegment(segment, viewProjectionMatrix, viewportMatrix, segmentColor);
-		DrawPlane(plane, viewProjectionMatrix, viewportMatrix, WHITE);
+		DrawTriangle(triangle, viewProjectionMatrix, viewportMatrix, WHITE);
 
 		Novice::EndFrame();
 
