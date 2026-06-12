@@ -21,6 +21,8 @@ struct Plane {
 	float distance;
 };
 
+// ★注意: 'Segment' 構造体は MyMathUtility.h で定義されているため、ここでは定義しません。
+
 // 球と球の衝突判定関数
 bool IsCollision(const Sphere& s1, const Sphere& s2) {
 	float distance = MyMathUtility::Length(MyMathUtility::Subtract(s2.center, s1.center));
@@ -43,15 +45,51 @@ bool IsCollision(const Sphere& s1, const Plane& p1) {
 	}
 	return false;
 }
-Vector3 Perpendicular(const Vector3& vector) {
 
+// 線分と平面の衝突判定関数
+bool IsCollision(const Segment& segment, const Plane& plane) {
+	// 1. 法線と線の差分ベクトルの内積を求める（垂直＝平行判定のため）
+	float dot = MyMathUtility::Dot(plane.normal, segment.diff);
+
+	// 2. 平行である場合は衝突しない（分母が0になるのを防ぐ）
+	if (dot == 0.0f) {
+		return false;
+	}
+
+	// 3. スライドの数式から比率 t を求める
+	float t = (plane.distance - MyMathUtility::Dot(segment.origin, plane.normal)) / dot;
+
+	// 4. t の値が 0.0f ～ 1.0f の範囲にあれば、線分の範囲内で衝突している
+	if (t >= 0.0f && t <= 1.0f) {
+		return true;
+	}
+
+	return false;
+}
+
+// 線分の描画関数
+void DrawSegment(const Segment& segment, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
+	// 始点
+	Vector3 start = segment.origin;
+	// 終点 = 始点 + 差分ベクトル
+	Vector3 end = MyMathUtility::Add(segment.origin, segment.diff);
+
+	// スクリーンの座標に変換
+	Vector3 screenStart = MyMathUtility::Transform(MyMathUtility::Transform(start, viewProjectionMatrix), viewportMatrix);
+	Vector3 screenEnd = MyMathUtility::Transform(MyMathUtility::Transform(end, viewProjectionMatrix), viewportMatrix);
+
+	// 線を描画
+	Novice::DrawLine(int(screenStart.x), int(screenStart.y), int(screenEnd.x), int(screenEnd.y), color);
+}
+
+Vector3 Perpendicular(const Vector3& vector) {
 	if (vector.x != 0.0f || vector.y != 0.0f) {
 		return {-vector.y, vector.x, 0.0f};
 	}
 	return {0.0f, -vector.z, vector.y};
 }
 
-void DrawPlane(const Plane& plane, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) { 
+void DrawPlane(const Plane& plane, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
 	// 1. 中心点を決める
 	Vector3 center = MyMathUtility::Multiply(plane.distance, plane.normal);
 
@@ -165,15 +203,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	float cameraSpeed = 0.08f;
 	float mouseSensitivity = 0.005f; // マウスの感度調整
 
-	// --- 追加：球と平面の初期化 ---
-	Sphere sphere = {
-	    {0.0f, 0.5f, 0.0f},
-        0.5f
-    };
+	// 線分と平面の初期化
+	Segment segment = {
+	    {-0.5f, 0.5f, 0.0f}, // 始点 (Origin)
+	    {1.0f,  1.0f, 0.0f}  // 終点への差分ベクトル (Diff)
+	};
 	Plane plane = {
 	    {0.0f, 1.0f, 0.0f},
         0.0f
-    }; // 上向きの平面
+    };
 
 	while (Novice::ProcessMessage() == 0) {
 		Novice::BeginFrame();
@@ -191,10 +229,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// ==================================================
 
 		// 1. マウスの右クリックドラッグによる視点変更
-		// // 1 = 右クリック
-		if (Novice::IsPressMouse(1)) { 
+		if (Novice::IsPressMouse(1)) {
 			if (isFirstClick) {
-				// クリックした瞬間は移動量を0にする
 				isFirstClick = false;
 			} else {
 				float deltaX = float(currentMouseX - prevMouseX);
@@ -203,14 +239,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				cameraRotate.y += deltaX * mouseSensitivity;
 				cameraRotate.x += deltaY * mouseSensitivity;
 
-				// カメラが逆さまにならないように制限
 				cameraRotate.x = std::clamp(cameraRotate.x, -float(M_PI) / 2.1f, float(M_PI) / 2.1f);
 			}
 		} else {
 			isFirstClick = true;
 		}
 
-		// カメラの向き（回転）を基準にした移動ベクトルの計算
 		Matrix4x4 rotationMatrix = MyMathUtility::Multiply(MyMathUtility::MakeRotateXMatrix(cameraRotate.x), MyMathUtility::MakeRotateYMatrix(cameraRotate.y));
 
 		Vector3 moveDir = {0.0f, 0.0f, 0.0f};
@@ -223,7 +257,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		if (keys[DIK_A])
 			moveDir.x -= 1.0f;
 
-		// 向いている方向に合わせてカメラ位置を移動
 		if (moveDir.x != 0.0f || moveDir.z != 0.0f) {
 			Vector3 transformedDir = MyMathUtility::Transform(moveDir, rotationMatrix);
 			cameraTranslate.x += transformedDir.x * cameraSpeed;
@@ -231,13 +264,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			cameraTranslate.z += transformedDir.z * cameraSpeed;
 		}
 
-		// 上下上昇キー（これはワールド座標基準のほうが操作しやすいので独立）
 		if (keys[DIK_SPACE])
 			cameraTranslate.y += cameraSpeed;
 		if (keys[DIK_LSHIFT])
 			cameraTranslate.y -= cameraSpeed;
 
-		// リセットキー
 		if (keys[DIK_R]) {
 			cameraTranslate = {0.0f, 4.0f, -10.0f};
 			cameraRotate = {0.45f, 0.0f, 0.0f};
@@ -246,26 +277,24 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// ===================================
 		// ImGui の処理
 		// ===================================
-		ImGui::Begin("Sphere vs Plane Collision");
+		ImGui::Begin("Segment vs Plane Collision");
 
-		ImGui::Text("--- Sphere ---");
-		ImGui::DragFloat3("Sphere Center", &sphere.center.x, 0.02f);
-		ImGui::DragFloat("Sphere Radius", &sphere.radius, 0.01f, 0.01f, 5.0f);
+		ImGui::Text("--- Segment ---");
+		ImGui::DragFloat3("Segment Origin", &segment.origin.x, 0.02f);
+		ImGui::DragFloat3("Segment Diff", &segment.diff.x, 0.02f);
 
 		ImGui::Separator();
 
 		ImGui::Text("--- Plane ---");
-		// 法線（Normal）の数値をいじったら
 		if (ImGui::DragFloat3("Plane Normal", &plane.normal.x, 0.01f, -1.0f, 1.0f)) {
-			// ★必ずここで長さを1にリセットする！
 			plane.normal = MyMathUtility::Normalize(plane.normal);
 		}
 		ImGui::DragFloat("Plane Distance", &plane.distance, 0.02f);
 
 		ImGui::Separator();
 
-		// 当たり判定
-		bool colliding = IsCollision(sphere, plane);
+		// 衝突判定
+		bool colliding = IsCollision(segment, plane);
 		if (colliding) {
 			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "STATUS: HIT!!");
 		} else {
@@ -286,11 +315,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 描画
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
-	// 当たっていたら赤、当たっていなければ白
-		uint32_t sphereColor = colliding ? RED : WHITE;
+		// 当たっていたら赤、当たっていなければ白
+		uint32_t segmentColor = colliding ? RED : WHITE;
 
-		// 球と平面の描画
-		DrawMiniSphere(sphere, viewProjectionMatrix, viewportMatrix, sphereColor);
+		// 線分と平面の描画
+		DrawSegment(segment, viewProjectionMatrix, viewportMatrix, segmentColor);
 		DrawPlane(plane, viewProjectionMatrix, viewportMatrix, WHITE);
 
 		Novice::EndFrame();
