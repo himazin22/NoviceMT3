@@ -47,4 +47,13 @@ public:
 
 	// ベクトルの長さを求める
 	static float Length(const KamataEngine::Vector3& v);
+
+	// 既存の Multiply(Matrix4x4, Matrix4x4) などとは別に、以下の2つを追加します。
+	static KamataEngine::Vector3 Multiply(float scalar, const KamataEngine::Vector3& v);
+
+	// ベクトルの外積（クロス積）
+	static KamataEngine::Vector3 Cross(const KamataEngine::Vector3& v1, const KamataEngine::Vector3& v2);
+
+	// ※正規化（Normalize）がまだ無い場合はこれも追加
+	static KamataEngine::Vector3 Normalize(const KamataEngine::Vector3& v);
 };

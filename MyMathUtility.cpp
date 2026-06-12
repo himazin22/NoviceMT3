@@ -385,3 +385,18 @@ Vector3 MyMathUtility::ClosestPoint(const Vector3& point, const Segment& segment
 }
 
 float MyMathUtility::Length(const Vector3& v) { return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z); }
+
+// 数値 × ベクトルの計算
+Vector3 MyMathUtility::Multiply(float scalar, const Vector3& v) { return {scalar * v.x, scalar * v.y, scalar * v.z}; }
+
+// 外積（クロス積）の計算
+Vector3 MyMathUtility::Cross(const Vector3& v1, const Vector3& v2) { return {v1.y * v2.z - v1.z * v2.y, v1.z * v2.x - v1.x * v2.z, v1.x * v2.y - v1.y * v2.x}; }
+
+// 正規化（長さを1にする） 
+Vector3 MyMathUtility::Normalize(const Vector3& v) {
+	float len = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+	if (len != 0.0f) {
+		return {v.x / len, v.y / len, v.z / len};
+	}
+	return v;
+}

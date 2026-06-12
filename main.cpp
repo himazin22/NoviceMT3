@@ -16,6 +16,11 @@ struct Sphere {
 	float radius;
 };
 
+struct Plane {
+	Vector3 normal;
+	float distance;
+};
+
 // 球と球の衝突判定関数
 bool IsCollision(const Sphere& s1, const Sphere& s2) {
 	float distance = MyMathUtility::Length(MyMathUtility::Subtract(s2.center, s1.center));
@@ -23,6 +28,54 @@ bool IsCollision(const Sphere& s1, const Sphere& s2) {
 		return true;
 	}
 	return false;
+}
+
+bool IsCollision(const Sphere& s1, const Plane& p1) {
+	// 1. 球の中心点と、平面の法線ベクトルとの内積を計算
+	float dot = MyMathUtility::Dot(s1.center, p1.normal);
+
+	// 2. 内積から平面の距離を引いて絶対値をとり、平面からの最短距離を求める
+	float distance = std::abs(dot - p1.distance);
+
+	// 3. 最短距離が球の半径以下なら衝突している
+	if (distance <= s1.radius) {
+		return true;
+	}
+	return false;
+}
+Vector3 Perpendicular(const Vector3& vector) {
+
+	if (vector.x != 0.0f || vector.y != 0.0f) {
+		return {-vector.y, vector.x, 0.0f};
+	}
+	return {0.0f, -vector.z, vector.y};
+}
+
+void DrawPlane(const Plane& plane, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) { 
+	// 1. 中心点を決める
+	Vector3 center = MyMathUtility::Multiply(plane.distance, plane.normal);
+
+	// 2〜5. 中心から伸びる4つの直交するベクトルを求める
+	Vector3 perpendiculars[4];
+	perpendiculars[0] = MyMathUtility::Normalize(Perpendicular(plane.normal));              // 2
+	perpendiculars[1] = {-perpendiculars[0].x, -perpendiculars[0].y, -perpendiculars[0].z}; // 3
+	perpendiculars[2] = MyMathUtility::Cross(plane.normal, perpendiculars[0]);              // 4
+	perpendiculars[3] = {-perpendiculars[2].x, -perpendiculars[2].y, -perpendiculars[2].z}; // 5
+
+	// 6. ベクトルを定数倍(今回は2.0f)して中心に足し、スクリーンの座標に変換する
+	Vector3 points[4];
+	for (int32_t index = 0; index < 4; ++index) {
+		Vector3 extend = MyMathUtility::Multiply(2.0f, perpendiculars[index]); // 2.0fの大きさの平面になる
+		Vector3 point = MyMathUtility::Add(center, extend);
+		points[index] = MyMathUtility::Transform(MyMathUtility::Transform(point, viewProjectionMatrix), viewportMatrix);
+	}
+
+	// pointsをそれぞれ結んで DrawLine で矩形（ひし形）を描画する
+	// 0(右) -> 2(上) -> 1(左) -> 3(下) -> 0(右) の順に線を引く
+	Novice::DrawLine(int(points[0].x), int(points[0].y), int(points[2].x), int(points[2].y), color);
+	Novice::DrawLine(int(points[2].x), int(points[2].y), int(points[1].x), int(points[1].y), color);
+	Novice::DrawLine(int(points[1].x), int(points[1].y), int(points[3].x), int(points[3].y), color);
+	Novice::DrawLine(int(points[3].x), int(points[3].y), int(points[0].x), int(points[0].y), color);
 }
 
 // 軽量な球体描画関数
@@ -112,15 +165,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	float cameraSpeed = 0.08f;
 	float mouseSensitivity = 0.005f; // マウスの感度調整
 
-	// 2つの球体の初期化
-	Sphere sphere1{
-	    {-1.0f, 0.5f, 0.0f},
+	// --- 追加：球と平面の初期化 ---
+	Sphere sphere = {
+	    {0.0f, 0.5f, 0.0f},
         0.5f
     };
-	Sphere sphere2{
-	    {1.0f, 0.5f, 0.0f},
-        0.4f
-    };
+	Plane plane = {
+	    {0.0f, 1.0f, 0.0f},
+        0.0f
+    }; // 上向きの平面
 
 	while (Novice::ProcessMessage() == 0) {
 		Novice::BeginFrame();
@@ -190,33 +243,33 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			cameraRotate = {0.45f, 0.0f, 0.0f};
 		}
 
-		// --- ImGui ウィンドウ ---
-		ImGui::Begin("Debug Window");
+		// ===================================
+		// ImGui の処理
+		// ===================================
+		ImGui::Begin("Sphere vs Plane Collision");
 
-		ImGui::Text("--- Camera Controls ---");
-		ImGui::Text("Move: [W][A][S][D]");
-		ImGui::Text("Look Around: [Right Click + Drag]");
-		ImGui::Text("Up/Down: [Space] / [LShift]");
-		ImGui::Text("Reset View: Press [R]");
-
-		ImGui::Separator();
-
-		ImGui::Text("--- Sphere Settings ---");
-		ImGui::Text("Sphere 1 (White)");
-		ImGui::DragFloat3("Center 1", &sphere1.center.x, 0.02f);
-		ImGui::DragFloat("Radius 1", &sphere1.radius, 0.01f, 0.01f, 5.0f);
-
-		ImGui::Text("Sphere 2 (Changes Color)");
-		ImGui::DragFloat3("Center 2", &sphere2.center.x, 0.02f);
-		ImGui::DragFloat("Radius 2", &sphere2.radius, 0.01f, 0.01f, 5.0f);
+		ImGui::Text("--- Sphere ---");
+		ImGui::DragFloat3("Sphere Center", &sphere.center.x, 0.02f);
+		ImGui::DragFloat("Sphere Radius", &sphere.radius, 0.01f, 0.01f, 5.0f);
 
 		ImGui::Separator();
 
-		bool colliding = IsCollision(sphere1, sphere2);
+		ImGui::Text("--- Plane ---");
+		// 法線（Normal）の数値をいじったら
+		if (ImGui::DragFloat3("Plane Normal", &plane.normal.x, 0.01f, -1.0f, 1.0f)) {
+			// ★必ずここで長さを1にリセットする！
+			plane.normal = MyMathUtility::Normalize(plane.normal);
+		}
+		ImGui::DragFloat("Plane Distance", &plane.distance, 0.02f);
+
+		ImGui::Separator();
+
+		// 当たり判定
+		bool colliding = IsCollision(sphere, plane);
 		if (colliding) {
-			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "STATUS: COLLISION!");
+			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "STATUS: HIT!!");
 		} else {
-			ImGui::Text("STATUS: No Collision");
+			ImGui::Text("STATUS: Safe");
 		}
 
 		ImGui::End();
@@ -233,11 +286,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 描画
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
-		uint32_t sphere1Color = WHITE;
-		uint32_t sphere2Color = colliding ? RED : WHITE;
+	// 当たっていたら赤、当たっていなければ白
+		uint32_t sphereColor = colliding ? RED : WHITE;
 
-		DrawMiniSphere(sphere1, viewProjectionMatrix, viewportMatrix, sphere1Color);
-		DrawMiniSphere(sphere2, viewProjectionMatrix, viewportMatrix, sphere2Color);
+		// 球と平面の描画
+		DrawMiniSphere(sphere, viewProjectionMatrix, viewportMatrix, sphereColor);
+		DrawPlane(plane, viewProjectionMatrix, viewportMatrix, WHITE);
 
 		Novice::EndFrame();
 
