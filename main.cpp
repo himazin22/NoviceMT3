@@ -155,6 +155,67 @@ bool IsCollision(const AABB& aabb, const Sphere& sphere) {
 	return false;
 }
 
+bool IsCollision(const AABB& aabb, const Segment& segment) {
+	// 各軸における進入時間(tMin)と退出時間(tMax)の初期値を設定 (線分なので 0.0f から 1.0f の範囲)
+	float tMin = 0.0f;
+	float tMax = 1.0f;
+
+	// --- X軸の判定 ---
+	if (std::abs(segment.diff.x) < 0.0001f) {
+		// 線分がX軸に対して平行な場合、始点がAABBの外にあれば衝突しない
+		if (segment.origin.x < aabb.min.x || segment.origin.x > aabb.max.x) {
+			return false;
+		}
+	} else {
+		// 各面への到達時間を計算
+		float t1 = (aabb.min.x - segment.origin.x) / segment.diff.x;
+		float t2 = (aabb.max.x - segment.origin.x) / segment.diff.x;
+		// 進入面と退出面を正しくソート
+		float tNear = (std::min)(t1, t2);
+		float tFar = (std::max)(t1, t2);
+		// 全体の時間範囲を狭めていく
+		tMin = (std::max)(tMin, tNear);
+		tMax = (std::min)(tMax, tFar);
+		if (tMin > tMax)
+			return false; // 矛盾が生じたら衝突していない
+	}
+
+	// --- Y軸の判定 ---
+	if (std::abs(segment.diff.y) < 0.0001f) {
+		if (segment.origin.y < aabb.min.y || segment.origin.y > aabb.max.y) {
+			return false;
+		}
+	} else {
+		float t1 = (aabb.min.y - segment.origin.y) / segment.diff.y;
+		float t2 = (aabb.max.y - segment.origin.y) / segment.diff.y;
+		float tNear = (std::min)(t1, t2);
+		float tFar = (std::max)(t1, t2);
+		tMin = (std::max)(tMin, tNear);
+		tMax = (std::min)(tMax, tFar);
+		if (tMin > tMax)
+			return false;
+	}
+
+	// --- Z軸の判定 ---
+	if (std::abs(segment.diff.z) < 0.0001f) {
+		if (segment.origin.z < aabb.min.z || segment.origin.z > aabb.max.z) {
+			return false;
+		}
+	} else {
+		float t1 = (aabb.min.z - segment.origin.z) / segment.diff.z;
+		float t2 = (aabb.max.z - segment.origin.z) / segment.diff.z;
+		float tNear = (std::min)(t1, t2);
+		float tFar = (std::max)(t1, t2);
+		tMin = (std::max)(tMin, tNear);
+		tMax = (std::min)(tMax, tFar);
+		if (tMin > tMax)
+			return false;
+	}
+
+	// 3軸すべてで重なる時間領域（tMin <= tMax）が存在すれば衝突している
+	return true;
+}
+
 void DrawAABB(const AABB& aabb, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
 	// 8つの頂点を定義
 	Vector3 vertices[8] = {
@@ -350,13 +411,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	// --- main関数内の変数初期化セクション ---
 	AABB aabb = {
-	    {-1.0f, -1.0f, -1.0f}, // min
-	    {1.0f,  1.0f,  1.0f }  // max
+	    {-0.5f, -0.5f, -0.5f}, // min
+	    {0.5f,  0.5f,  0.5f }  // max
 	};
 
-	Sphere sphere = {
-	    {2.0f, 0.0f, 0.0f}, // center
-	    0.5f  // radius
+	Segment segment = {
+		.origin{-0.7f,0.3f,0.0f},
+        .diff{2.0f,-0.5f,0.0f}
 	};
 
 	while (Novice::ProcessMessage() == 0) {
@@ -420,20 +481,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			cameraRotate = {0.45f, 0.0f, 0.0f};
 		}
 
-		// --- 衝突の事前処理（値が逆転したとき用の安全ガード） ---
+		// AABBの最小・最大逆転防止ガード
 		AABB validAABB = {
 		    {(std::min)(aabb.min.x, aabb.max.x), (std::min)(aabb.min.y, aabb.max.y), (std::min)(aabb.min.z, aabb.max.z)},
 		    {(std::max)(aabb.min.x, aabb.max.x), (std::max)(aabb.min.y, aabb.max.y), (std::max)(aabb.min.z, aabb.max.z)}
         };
 
-		// 衝突判定の実行
-		bool isColliding = IsCollision(validAABB, sphere);
+		// 衝突判定
+		bool isColliding = IsCollision(validAABB, segment);
 
 		// ===================================
 		// ImGui の処理
 		// ===================================
 
-		ImGui::Begin("Collision Window");
+		ImGui::Begin("AABB to Segment Window");
 
 		ImGui::Text("--- AABB ---");
 		ImGui::DragFloat3("AABB Min", &aabb.min.x, 0.02f);
@@ -441,9 +502,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		ImGui::Separator();
 
-		ImGui::Text("--- Sphere ---");
-		ImGui::DragFloat3("Sphere Center", &sphere.center.x, 0.02f);
-		ImGui::DragFloat("Sphere Radius", &sphere.radius, 0.01f, 0.01f, 5.0f);
+		ImGui::Text("--- Segment ---");
+		ImGui::DragFloat3("Segment Origin (Start)", &segment.origin.x, 0.02f);
+		ImGui::DragFloat3("Segment Diff (Vector)", &segment.diff.x, 0.02f);
 
 		ImGui::Separator();
 
@@ -466,14 +527,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		// 描画
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
-
-		// AABBと球のカラー割り当て（衝突していたら球（またはAABB）を赤にする）
+		// 衝突していたら線分の色を赤にする
 		uint32_t aabbColor = WHITE;
-		uint32_t sphereColor = isColliding ? RED : WHITE;
+		uint32_t segmentColor = isColliding ? RED : WHITE;
 
-		// 各オブジェクトの描画
 		DrawAABB(validAABB, viewProjectionMatrix, viewportMatrix, aabbColor);
-		DrawMiniSphere(sphere, viewProjectionMatrix, viewportMatrix, sphereColor);
+
+		// 線分の終点を計算して描画
+		Vector3 segmentEnd = MyMathUtility::Add(segment.origin, segment.diff);
+		DrawSegment(segment, viewProjectionMatrix, viewportMatrix, segmentColor);
 
 		Novice::EndFrame();
 
