@@ -25,6 +25,10 @@ struct Triangle {
 	Vector3 Vvertices[3];
 };
 
+struct AABB {
+	Vector3 min;
+	Vector3 max;
+};
 
 // 球と球の衝突判定関数
 bool IsCollision(const Sphere& s1, const Sphere& s2) {
@@ -67,6 +71,17 @@ bool IsCollision(const Segment& segment, const Plane& plane) {
 		return true;
 	}
 
+	return false;
+}
+
+// AABBとAABBの衝突判定
+bool IsCollision(const AABB& aabb1, const AABB& aabb2) {
+	if ((aabb1.min.x <= aabb2.max.x && aabb1.max.x >= aabb2.min.x) && // X軸の重なり
+	    (aabb1.min.y <= aabb2.max.y && aabb1.max.y >= aabb2.min.y) && // Y軸の重なり
+	    (aabb1.min.z <= aabb2.max.z && aabb1.max.z >= aabb2.min.z))   // Z軸の重なり
+	{
+		return true; // すべての軸で重なっていれば衝突
+	}
 	return false;
 }
 
@@ -121,6 +136,49 @@ bool IsCollision(const Triangle& triangle, const Segment& segment) {
 	}
 
 	return false;
+}
+
+void DrawAABB(const AABB& aabb, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
+	// 8つの頂点を定義
+	Vector3 vertices[8] = {
+	    {aabb.min.x, aabb.min.y, aabb.min.z}, // 0
+	    {aabb.max.x, aabb.min.y, aabb.min.z}, // 1
+	    {aabb.min.x, aabb.max.y, aabb.min.z}, // 2
+	    {aabb.max.x, aabb.max.y, aabb.min.z}, // 3
+	    {aabb.min.x, aabb.min.y, aabb.max.z}, // 4
+	    {aabb.max.x, aabb.min.y, aabb.max.z}, // 5
+	    {aabb.min.x, aabb.max.y, aabb.max.z}, // 6
+	    {aabb.max.x, aabb.max.y, aabb.max.z}  // 7
+	};
+
+	// スクリーン座標に変換された頂点を格納する配列
+	Vector3 screenVertices[8];
+	for (int i = 0; i < 8; ++i) {
+		Matrix4x4 wvpVpMatrix = MyMathUtility::Multiply(viewProjectionMatrix, viewportMatrix);
+		screenVertices[i] = MyMathUtility::Transform(vertices[i], wvpVpMatrix);
+	}
+
+	// 12本の辺（インデックスペア）を描画
+	int indices[12][2] = {
+	    {0, 1},
+        {1, 3},
+        {3, 2},
+        {2, 0}, // 手前の面
+	    {4, 5},
+        {5, 7},
+        {7, 6},
+        {6, 4}, // 奥の面
+	    {0, 4},
+        {1, 5},
+        {2, 6},
+        {3, 7}  // 手前と奥を繋ぐ辺
+	};
+
+	for (int i = 0; i < 12; ++i) {
+		Novice::DrawLine(
+		    static_cast<int>(screenVertices[indices[i][0]].x), static_cast<int>(screenVertices[indices[i][0]].y), static_cast<int>(screenVertices[indices[i][1]].x),
+		    static_cast<int>(screenVertices[indices[i][1]].y), color);
+	}
 }
 
 // 三角形の描画関数
@@ -273,19 +331,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	float cameraSpeed = 0.08f;
 	float mouseSensitivity = 0.005f; // マウスの感度調整
 
-	// 線分と三角形の初期化
-	Segment segment = {
-	    {0.44f, 0.42f, -1.99f}, // 始点 (Origin)
-	    {0.0f,  0.5f,  2.0f  }  // 差分ベクトル (Diff)
+	// --- main関数内の変数初期化セクション ---
+	AABB aabb1 = {
+	    {-1.0f, -1.0f, -1.0f}, // min
+	    {1.0f,  1.0f,  1.0f }  // max
 	};
 
-	Triangle triangle = {
-	    {
-         {-1.0f, 0.0f, 0.0f}, // v0
-	        {0.0f, 1.0f, 0.0f},  // v1
-	        {1.0f, 0.0f, 0.0f}   // v2
-	    }
-    };
+	AABB aabb2 = {
+	    {0.5f, 0.5f, 0.5f}, // min
+	    {2.5f, 2.5f, 2.5f}  // max
+	};
 
 	while (Novice::ProcessMessage() == 0) {
 		Novice::BeginFrame();
@@ -348,27 +403,42 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			cameraRotate = {0.45f, 0.0f, 0.0f};
 		}
 
+		// --- 衝突の事前処理（元の値を壊さないように一時的なAABBを作ってガードする） ---
+		AABB validAABB1 = {
+		    {(std::min)(aabb1.min.x, aabb1.max.x), (std::min)(aabb1.min.y, aabb1.max.y), (std::min)(aabb1.min.z, aabb1.max.z)},
+		    {(std::max)(aabb1.min.x, aabb1.max.x), (std::max)(aabb1.min.y, aabb1.max.y), (std::max)(aabb1.min.z, aabb1.max.z)}
+        };
+
+		AABB validAABB2 = {
+		    {(std::min)(aabb2.min.x, aabb2.max.x), (std::min)(aabb2.min.y, aabb2.max.y), (std::min)(aabb2.min.z, aabb2.max.z)},
+		    {(std::max)(aabb2.min.x, aabb2.max.x), (std::max)(aabb2.min.y, aabb2.max.y), (std::max)(aabb2.min.z, aabb2.max.z)}
+        };
+
+		// 衝突判定には、安全ガードを適用した一時的なAABBを渡す
+		bool isColliding = IsCollision(validAABB1, validAABB2);
+
 		// ===================================
 		// ImGui の処理
 		// ===================================
-		ImGui::Begin("Triangle vs Segment Collision");
 
-		ImGui::Text("--- Triangle ---");
-		ImGui::DragFloat3("Triangle.v0", &triangle.Vvertices[0].x, 0.02f);
-		ImGui::DragFloat3("Triangle.v1", &triangle.Vvertices[1].x, 0.02f);
-		ImGui::DragFloat3("Triangle.v2", &triangle.Vvertices[2].x, 0.02f);
+		// --- ImGuiの描画 ---
+		ImGui::Begin("AABB Collision Window");
 
-		ImGui::Separator();
-
-		ImGui::Text("--- Segment ---");
-		ImGui::DragFloat3("Segment Origin", &segment.origin.x, 0.02f);
-		ImGui::DragFloat3("Segment Diff", &segment.diff.x, 0.02f);
+		ImGui::Text("--- AABB 1 ---");
+		ImGui::DragFloat3("AABB1 Min", &aabb1.min.x, 0.02f);
+		ImGui::DragFloat3("AABB1 Max", &aabb1.max.x, 0.02f);
 
 		ImGui::Separator();
 
-		// 衝突判定
-		bool colliding = IsCollision(triangle, segment);
-		if (colliding) {
+		ImGui::Text("--- AABB 2 ---");
+		ImGui::DragFloat3("AABB2 Min", &aabb2.min.x, 0.02f);
+		ImGui::DragFloat3("AABB2 Max", &aabb2.max.x, 0.02f);
+
+		ImGui::Separator();
+
+		// 衝突判定の実行
+		bool isHit = IsCollision(aabb1, aabb2);
+		if (isHit) {
 			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "STATUS: HIT!!");
 		} else {
 			ImGui::Text("STATUS: Safe");
@@ -388,12 +458,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 描画
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
-		// 当たっていたら赤、当たっていなければ白
-		uint32_t segmentColor = colliding ? RED : WHITE;
+		// AABBの描画（衝突している場合は赤、安全な場合は白）
+		uint32_t box1Color = WHITE;
+		uint32_t box2Color = isColliding ? RED : WHITE;
 
-		// 線分と三角形の描画
-		DrawSegment(segment, viewProjectionMatrix, viewportMatrix, segmentColor);
-		DrawTriangle(triangle, viewProjectionMatrix, viewportMatrix, WHITE);
+		// 描画（安全なAABBを描画に使うと見た目もバグらなくなります）
+		DrawAABB(validAABB1, viewProjectionMatrix, viewportMatrix, box1Color);
+		DrawAABB(validAABB2, viewProjectionMatrix, viewportMatrix, box2Color);
 
 		Novice::EndFrame();
 
