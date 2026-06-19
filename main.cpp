@@ -138,6 +138,23 @@ bool IsCollision(const Triangle& triangle, const Segment& segment) {
 	return false;
 }
 
+bool IsCollision(const AABB& aabb, const Sphere& sphere) {
+	// AABB上の最も球の中心に近い点（最近接点）を求める
+	Vector3 closestPoint;
+	closestPoint.x = (std::clamp)(sphere.center.x, aabb.min.x, aabb.max.x);
+	closestPoint.y = (std::clamp)(sphere.center.y, aabb.min.y, aabb.max.y);
+	closestPoint.z = (std::clamp)(sphere.center.z, aabb.min.z, aabb.max.z);
+
+	// 最近接点と球の中心との距離を求める
+	float distance = MyMathUtility::Length(MyMathUtility::Subtract(closestPoint, sphere.center));
+
+	// 距離が半径以下なら衝突している
+	if (distance <= sphere.radius) {
+		return true;
+	}
+	return false;
+}
+
 void DrawAABB(const AABB& aabb, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
 	// 8つの頂点を定義
 	Vector3 vertices[8] = {
@@ -332,14 +349,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	float mouseSensitivity = 0.005f; // マウスの感度調整
 
 	// --- main関数内の変数初期化セクション ---
-	AABB aabb1 = {
+	AABB aabb = {
 	    {-1.0f, -1.0f, -1.0f}, // min
 	    {1.0f,  1.0f,  1.0f }  // max
 	};
 
-	AABB aabb2 = {
-	    {0.5f, 0.5f, 0.5f}, // min
-	    {2.5f, 2.5f, 2.5f}  // max
+	Sphere sphere = {
+	    {2.0f, 0.0f, 0.0f}, // center
+	    0.5f  // radius
 	};
 
 	while (Novice::ProcessMessage() == 0) {
@@ -403,42 +420,34 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			cameraRotate = {0.45f, 0.0f, 0.0f};
 		}
 
-		// --- 衝突の事前処理（元の値を壊さないように一時的なAABBを作ってガードする） ---
-		AABB validAABB1 = {
-		    {(std::min)(aabb1.min.x, aabb1.max.x), (std::min)(aabb1.min.y, aabb1.max.y), (std::min)(aabb1.min.z, aabb1.max.z)},
-		    {(std::max)(aabb1.min.x, aabb1.max.x), (std::max)(aabb1.min.y, aabb1.max.y), (std::max)(aabb1.min.z, aabb1.max.z)}
+		// --- 衝突の事前処理（値が逆転したとき用の安全ガード） ---
+		AABB validAABB = {
+		    {(std::min)(aabb.min.x, aabb.max.x), (std::min)(aabb.min.y, aabb.max.y), (std::min)(aabb.min.z, aabb.max.z)},
+		    {(std::max)(aabb.min.x, aabb.max.x), (std::max)(aabb.min.y, aabb.max.y), (std::max)(aabb.min.z, aabb.max.z)}
         };
 
-		AABB validAABB2 = {
-		    {(std::min)(aabb2.min.x, aabb2.max.x), (std::min)(aabb2.min.y, aabb2.max.y), (std::min)(aabb2.min.z, aabb2.max.z)},
-		    {(std::max)(aabb2.min.x, aabb2.max.x), (std::max)(aabb2.min.y, aabb2.max.y), (std::max)(aabb2.min.z, aabb2.max.z)}
-        };
-
-		// 衝突判定には、安全ガードを適用した一時的なAABBを渡す
-		bool isColliding = IsCollision(validAABB1, validAABB2);
+		// 衝突判定の実行
+		bool isColliding = IsCollision(validAABB, sphere);
 
 		// ===================================
 		// ImGui の処理
 		// ===================================
 
-		// --- ImGuiの描画 ---
-		ImGui::Begin("AABB Collision Window");
+		ImGui::Begin("Collision Window");
 
-		ImGui::Text("--- AABB 1 ---");
-		ImGui::DragFloat3("AABB1 Min", &aabb1.min.x, 0.02f);
-		ImGui::DragFloat3("AABB1 Max", &aabb1.max.x, 0.02f);
-
-		ImGui::Separator();
-
-		ImGui::Text("--- AABB 2 ---");
-		ImGui::DragFloat3("AABB2 Min", &aabb2.min.x, 0.02f);
-		ImGui::DragFloat3("AABB2 Max", &aabb2.max.x, 0.02f);
+		ImGui::Text("--- AABB ---");
+		ImGui::DragFloat3("AABB Min", &aabb.min.x, 0.02f);
+		ImGui::DragFloat3("AABB Max", &aabb.max.x, 0.02f);
 
 		ImGui::Separator();
 
-		// 衝突判定の実行
-		bool isHit = IsCollision(aabb1, aabb2);
-		if (isHit) {
+		ImGui::Text("--- Sphere ---");
+		ImGui::DragFloat3("Sphere Center", &sphere.center.x, 0.02f);
+		ImGui::DragFloat("Sphere Radius", &sphere.radius, 0.01f, 0.01f, 5.0f);
+
+		ImGui::Separator();
+
+		if (isColliding) {
 			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "STATUS: HIT!!");
 		} else {
 			ImGui::Text("STATUS: Safe");
@@ -458,13 +467,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 描画
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
-		// AABBの描画（衝突している場合は赤、安全な場合は白）
-		uint32_t box1Color = WHITE;
-		uint32_t box2Color = isColliding ? RED : WHITE;
+		// AABBと球のカラー割り当て（衝突していたら球（またはAABB）を赤にする）
+		uint32_t aabbColor = WHITE;
+		uint32_t sphereColor = isColliding ? RED : WHITE;
 
-		// 描画（安全なAABBを描画に使うと見た目もバグらなくなります）
-		DrawAABB(validAABB1, viewProjectionMatrix, viewportMatrix, box1Color);
-		DrawAABB(validAABB2, viewProjectionMatrix, viewportMatrix, box2Color);
+		// 各オブジェクトの描画
+		DrawAABB(validAABB, viewProjectionMatrix, viewportMatrix, aabbColor);
+		DrawMiniSphere(sphere, viewProjectionMatrix, viewportMatrix, sphereColor);
 
 		Novice::EndFrame();
 
