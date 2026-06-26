@@ -254,6 +254,31 @@ bool IsCollision(const OBB& obb, const Sphere& sphere) {
 	return distanceSquared <= (sphere.radius * sphere.radius);
 }
 
+// 線分とOBBの衝突判定関数
+bool IsCollision(const Segment& segment, const OBB& obb) {
+	// 1. OBBのローカル空間へ変換するための、線分の始点をOBB中心からの相対座標にする
+	Vector3 localOrigin = MyMathUtility::Subtract(segment.origin, obb.center);
+
+	// 2. 線分の始点と方向ベクトルを、OBBの各軸に射影（回転の逆変換）する
+	// OBBの orientations は直交しているので、内積（Dot）をとるだけでローカル座標に変換できます。
+	Segment localSegment;
+	localSegment.origin.x = MyMathUtility::Dot(localOrigin, obb.orientations[0]);
+	localSegment.origin.y = MyMathUtility::Dot(localOrigin, obb.orientations[1]);
+	localSegment.origin.z = MyMathUtility::Dot(localOrigin, obb.orientations[2]);
+
+	localSegment.diff.x = MyMathUtility::Dot(segment.diff, obb.orientations[0]);
+	localSegment.diff.y = MyMathUtility::Dot(segment.diff, obb.orientations[1]);
+	localSegment.diff.z = MyMathUtility::Dot(segment.diff, obb.orientations[2]);
+
+	// 3. OBBのサイズから、ローカル空間上でのAABB（min, max）を作成する
+	AABB localAABB;
+	localAABB.min = {-obb.size.x, -obb.size.y, -obb.size.z};
+	localAABB.max = {obb.size.x, obb.size.y, obb.size.z};
+
+	// 4. すでに作成済みの「AABB と Segment の衝突判定」に丸投げする
+	return IsCollision(localAABB, localSegment);
+}
+
 void DrawOBB(const OBB& obb, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
 	// OBBの8頂点を定義（ローカルオフセットの組み合わせ）
 	Vector3 localVertices[8] = {
@@ -507,10 +532,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	    .size{0.5f,               0.5f,               0.5f              }
     };
 
-	Sphere sphere{
-	    .center{0.0f, 0.0f, 0.0f},
-        .radius{0.5}
-    };
+	Segment segment{
+	    .origin{-2.0f, 1.0f, 0.0f}, // 始点
+	    .diff{4.0f,  0.0f, 0.0f}  // 終点へ向かうベクトル（右に突き抜ける線）
+	};
 
 	while (Novice::ProcessMessage() == 0) {
 		Novice::BeginFrame();
@@ -573,7 +598,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			cameraRotate = {0.45f, 0.0f, 0.0f};
 		}
 
-		//ImGuiの回転角から回転行列をつくり、各軸ベクトルを計算
+		// ImGuiの回転角から回転行列をつくり、各軸ベクトルを計算
 		Matrix4x4 obbRotM = MyMathUtility::Multiply(
 		    MyMathUtility::Multiply(MyMathUtility::MakeRotateXMatrix(obbRotate.x), MyMathUtility::MakeRotateYMatrix(obbRotate.y)), MyMathUtility::MakeRotateZMatrix(obbRotate.z));
 
@@ -582,34 +607,28 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		obb.orientations[1] = {obbRotM.m[1][0], obbRotM.m[1][1], obbRotM.m[1][2]};
 		obb.orientations[2] = {obbRotM.m[2][0], obbRotM.m[2][1], obbRotM.m[2][2]};
 
-		// 衝突判定
-		bool isColliding = IsCollision(obb, sphere);
+		// 2. 衝突判定の呼び出し
+		bool isColliding = IsCollision(segment, obb);
 
 		// ===================================
 		// ImGui の処理
 		// ===================================
 
-		ImGui::Begin("OBB to Sphere Window");
-
+		// 3. ImGuiの描画（確認用にSegmentのデバッグを追加すると便利です）
+		ImGui::Begin("OBB to Segment Window");
 		ImGui::Text("--- OBB ---");
 		ImGui::DragFloat3("OBB Center", &obb.center.x, 0.02f);
-		ImGui::DragFloat3("OBB Size", &obb.size.x, 0.02f, 0.01f, 10.0f);
 		ImGui::SliderFloat3("OBB Rotate", &obbRotate.x, -float(M_PI), float(M_PI));
 
-		ImGui::Separator();
-
-		ImGui::Text("--- Sphere ---");
-		ImGui::DragFloat3("Sphere Center", &sphere.center.x, 0.02f);
-		ImGui::DragFloat3("Sphere Radius", &sphere.radius, 0.02f, 0.01f, 5.0f);
-
-		ImGui::Separator();
+		ImGui::Text("--- Segment ---");
+		ImGui::DragFloat3("Segment Origin", &segment.origin.x, 0.02f);
+		ImGui::DragFloat3("Segment Diff", &segment.diff.x, 0.02f);
 
 		if (isColliding) {
 			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "STATUS: HIT!!");
 		} else {
 			ImGui::Text("STATUS: Safe");
 		}
-
 		ImGui::End();
 
 		// ビュー・プロジェクション計算
@@ -626,9 +645,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 衝突状態に合わせて色を変更
 		uint32_t color = isColliding ? RED : WHITE;
 
-		// 各形状の描画
+		//図形 
 		DrawOBB(obb, viewProjectionMatrix, viewportMatrix, color);
-		DrawMiniSphere(sphere, viewProjectionMatrix, viewportMatrix, color);
+		DrawSegment(segment, viewProjectionMatrix, viewportMatrix, color);
 
 		Novice::EndFrame();
 
