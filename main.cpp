@@ -279,6 +279,88 @@ bool IsCollision(const Segment& segment, const OBB& obb) {
 	return IsCollision(localAABB, localSegment);
 }
 
+// 分離軸（SAT）の判定用サブ関数
+bool TestAxis(const Vector3& obb1Center, const OBB& obb1, const OBB& obb2, const Vector3& axis) {
+	// 軸がゼロベクトルに近い（外積が平行で潰れた）場合はスキップ
+	float axisLenSq = MyMathUtility::LengthSquared(axis);
+	if (axisLenSq < 0.0001f) {
+		return false;
+	}
+
+	// 単位ベクトル化
+	Vector3 n = MyMathUtility::Normalize(axis);
+
+	// 1. 両OBBの中心間の距離を軸上に射影
+	float centerDist = std::abs(MyMathUtility::Dot(MyMathUtility::Subtract(obb2.center, obb1Center), n));
+
+	// 2. OBB1の半径（軸への射影の最大半幅）を計算
+	float r1 = std::abs(MyMathUtility::Dot(MyMathUtility::Multiply(obb1.size.x, obb1.orientations[0]), n)) +
+	           std::abs(MyMathUtility::Dot(MyMathUtility::Multiply(obb1.size.y, obb1.orientations[1]), n)) +
+	           std::abs(MyMathUtility::Dot(MyMathUtility::Multiply(obb1.size.z, obb1.orientations[2]), n));
+
+	// 3. OBB2の半径（軸への射影の最大半幅）を計算
+	float r2 = std::abs(MyMathUtility::Dot(MyMathUtility::Multiply(obb2.size.x, obb2.orientations[0]), n)) +
+	           std::abs(MyMathUtility::Dot(MyMathUtility::Multiply(obb2.size.y, obb2.orientations[1]), n)) +
+	           std::abs(MyMathUtility::Dot(MyMathUtility::Multiply(obb2.size.z, obb2.orientations[2]), n));
+
+	// 中心間距離が、お互いの半径の合計より大きければ、そこに隙間が存在する（分離している）
+	return centerDist > (r1 + r2);
+}
+
+// OBBとOBBの衝突判定関数
+bool IsCollision(const OBB& obb1, const OBB& obb2) {
+	// OBB1の軸
+	const Vector3& A0 = obb1.orientations[0];
+	const Vector3& A1 = obb1.orientations[1];
+	const Vector3& A2 = obb1.orientations[2];
+
+	// OBB2の軸
+	const Vector3& B0 = obb2.orientations[0];
+	const Vector3& B1 = obb2.orientations[1];
+	const Vector3& B2 = obb2.orientations[2];
+
+	// --- 1. OBB1の面法線（3本） ---
+	if (TestAxis(obb1.center, obb1, obb2, A0))
+		return false;
+	if (TestAxis(obb1.center, obb1, obb2, A1))
+		return false;
+	if (TestAxis(obb1.center, obb1, obb2, A2))
+		return false;
+
+	// --- 2. OBB2の面法線（3本） ---
+	if (TestAxis(obb1.center, obb1, obb2, B0))
+		return false;
+	if (TestAxis(obb1.center, obb1, obb2, B1))
+		return false;
+	if (TestAxis(obb1.center, obb1, obb2, B2))
+		return false;
+
+	// --- 3. 辺同士の外積（9本） ---
+	if (TestAxis(obb1.center, obb1, obb2, MyMathUtility::Cross(A0, B0)))
+		return false;
+	if (TestAxis(obb1.center, obb1, obb2, MyMathUtility::Cross(A0, B1)))
+		return false;
+	if (TestAxis(obb1.center, obb1, obb2, MyMathUtility::Cross(A0, B2)))
+		return false;
+
+	if (TestAxis(obb1.center, obb1, obb2, MyMathUtility::Cross(A1, B0)))
+		return false;
+	if (TestAxis(obb1.center, obb1, obb2, MyMathUtility::Cross(A1, B1)))
+		return false;
+	if (TestAxis(obb1.center, obb1, obb2, MyMathUtility::Cross(A1, B2)))
+		return false;
+
+	if (TestAxis(obb1.center, obb1, obb2, MyMathUtility::Cross(A2, B0)))
+		return false;
+	if (TestAxis(obb1.center, obb1, obb2, MyMathUtility::Cross(A2, B1)))
+		return false;
+	if (TestAxis(obb1.center, obb1, obb2, MyMathUtility::Cross(A2, B2)))
+		return false;
+
+	// すべての軸で重ね合わせの隙間がなければ、衝突している
+	return true;
+}
+
 void DrawOBB(const OBB& obb, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
 	// OBBの8頂点を定義（ローカルオフセットの組み合わせ）
 	Vector3 localVertices[8] = {
@@ -522,20 +604,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	float mouseSensitivity = 0.005f; // マウスの感度調整
 
 	// OBB回転用角度(ラジアン)をImGuiで操作するための変数
-	Vector3 obbRotate = {0.0f, 0.0f, 0.0f};
-
-	OBB obb{
-	    .center{-1.0f,              0.0f,               0.0f              },
-
-	    .orientations{{1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}},
-
-	    .size{0.5f,               0.5f,               0.5f              }
+	Vector3 obb1Rotate = {0.0f, 0.0f, 0.0f};
+	Vector3 obb2Rotate = {0.0f, 0.0f, 0.0f};
+	OBB obb1{
+	    .center{-1.0f,              1.0f,               0.0f              },
+        .orientations{{1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}},
+        .size{0.5f,               0.5f,               0.5f              }
     };
 
-	Segment segment{
-	    .origin{-2.0f, 1.0f, 0.0f}, // 始点
-	    .diff{4.0f,  0.0f, 0.0f}  // 終点へ向かうベクトル（右に突き抜ける線）
-	};
+
+	OBB obb2{
+	    .center{1.0f,               1.0f,               0.0f              },
+        .orientations{{1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}},
+        .size{0.5f,               0.5f,               0.5f              }
+    };
 
 	while (Novice::ProcessMessage() == 0) {
 		Novice::BeginFrame();
@@ -598,31 +680,36 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			cameraRotate = {0.45f, 0.0f, 0.0f};
 		}
 
-		// ImGuiの回転角から回転行列をつくり、各軸ベクトルを計算
-		Matrix4x4 obbRotM = MyMathUtility::Multiply(
-		    MyMathUtility::Multiply(MyMathUtility::MakeRotateXMatrix(obbRotate.x), MyMathUtility::MakeRotateYMatrix(obbRotate.y)), MyMathUtility::MakeRotateZMatrix(obbRotate.z));
+		// OBB1の回転適用
+		Matrix4x4 obb1RotM = MyMathUtility::Multiply(
+		    MyMathUtility::Multiply(MyMathUtility::MakeRotateXMatrix(obb1Rotate.x), MyMathUtility::MakeRotateYMatrix(obb1Rotate.y)), MyMathUtility::MakeRotateZMatrix(obb1Rotate.z));
+		obb1.orientations[0] = {obb1RotM.m[0][0], obb1RotM.m[0][1], obb1RotM.m[0][2]};
+		obb1.orientations[1] = {obb1RotM.m[1][0], obb1RotM.m[1][1], obb1RotM.m[1][2]};
+		obb1.orientations[2] = {obb1RotM.m[2][0], obb1RotM.m[2][1], obb1RotM.m[2][2]};
 
-		// 回転行列の各列(または行)から、回転後のXYZ軸ベクトルを抽出
-		obb.orientations[0] = {obbRotM.m[0][0], obbRotM.m[0][1], obbRotM.m[0][2]};
-		obb.orientations[1] = {obbRotM.m[1][0], obbRotM.m[1][1], obbRotM.m[1][2]};
-		obb.orientations[2] = {obbRotM.m[2][0], obbRotM.m[2][1], obbRotM.m[2][2]};
+		// OBB2の回転適用
+		Matrix4x4 obb2RotM = MyMathUtility::Multiply(
+		    MyMathUtility::Multiply(MyMathUtility::MakeRotateXMatrix(obb2Rotate.x), MyMathUtility::MakeRotateYMatrix(obb2Rotate.y)), MyMathUtility::MakeRotateZMatrix(obb2Rotate.z));
+		obb2.orientations[0] = {obb2RotM.m[0][0], obb2RotM.m[0][1], obb2RotM.m[0][2]};
+		obb2.orientations[1] = {obb2RotM.m[1][0], obb2RotM.m[1][1], obb2RotM.m[1][2]};
+		obb2.orientations[2] = {obb2RotM.m[2][0], obb2RotM.m[2][1], obb2RotM.m[2][2]};
 
-		// 2. 衝突判定の呼び出し
-		bool isColliding = IsCollision(segment, obb);
+		// 衝突判定
+		bool isColliding = IsCollision(obb1, obb2);
 
 		// ===================================
 		// ImGui の処理
 		// ===================================
 
 		// 3. ImGuiの描画（確認用にSegmentのデバッグを追加すると便利です）
-		ImGui::Begin("OBB to Segment Window");
-		ImGui::Text("--- OBB ---");
-		ImGui::DragFloat3("OBB Center", &obb.center.x, 0.02f);
-		ImGui::SliderFloat3("OBB Rotate", &obbRotate.x, -float(M_PI), float(M_PI));
+		ImGui::Begin("OBB to OBB Window");
+		ImGui::Text("--- OBB 1 ---");
+		ImGui::DragFloat3("OBB1 Center", &obb1.center.x, 0.02f);
+		ImGui::SliderFloat3("OBB1 Rotate", &obb1Rotate.x, -float(M_PI), float(M_PI));
 
-		ImGui::Text("--- Segment ---");
-		ImGui::DragFloat3("Segment Origin", &segment.origin.x, 0.02f);
-		ImGui::DragFloat3("Segment Diff", &segment.diff.x, 0.02f);
+		ImGui::Text("--- OBB 2 ---");
+		ImGui::DragFloat3("OBB2 Center", &obb2.center.x, 0.02f);
+		ImGui::SliderFloat3("OBB2 Rotate", &obb2Rotate.x, -float(M_PI), float(M_PI));
 
 		if (isColliding) {
 			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "STATUS: HIT!!");
@@ -643,11 +730,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 描画
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 		// 衝突状態に合わせて色を変更
-		uint32_t color = isColliding ? RED : WHITE;
-
-		//図形 
-		DrawOBB(obb, viewProjectionMatrix, viewportMatrix, color);
-		DrawSegment(segment, viewProjectionMatrix, viewportMatrix, color);
+		uint32_t drawColor = isColliding ? RED : WHITE;
+		DrawOBB(obb1, viewProjectionMatrix, viewportMatrix, drawColor);
+		DrawOBB(obb2, viewProjectionMatrix, viewportMatrix, drawColor);
 
 		Novice::EndFrame();
 
