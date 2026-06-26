@@ -30,6 +30,12 @@ struct AABB {
 	Vector3 max;
 };
 
+struct OBB {
+	Vector3 center;
+	Vector3 orientations[3];
+	Vector3 size;
+};
+
 // 球と球の衝突判定関数
 bool IsCollision(const Sphere& s1, const Sphere& s2) {
 	float distance = MyMathUtility::Length(MyMathUtility::Subtract(s2.center, s1.center));
@@ -214,6 +220,87 @@ bool IsCollision(const AABB& aabb, const Segment& segment) {
 
 	// 3軸すべてで重なる時間領域（tMin <= tMax）が存在すれば衝突している
 	return true;
+}
+
+bool IsCollision(const OBB& obb, const Sphere& sphere) {
+	// 1. OBBの中心から球の中心へのベクトルを計算
+	Vector3 d = MyMathUtility::Subtract(sphere.center, obb.center);
+
+	// 最近接点を求めるためのベース（最初はOBBの中心）
+	Vector3 closestPoint = obb.center;
+
+	// 2. OBBの各軸（X, Y, Z）について、球の中心がOBBの範囲外にあればクランプして手繰り寄せる
+	// orientations[0] = X軸, orientations[1] = Y軸, orientations[2] = Z軸
+	float sizes[3] = {obb.size.x, obb.size.y, obb.size.z};
+
+	for (int i = 0; i < 3; ++i) {
+		// OBBの各軸に対する距離を内積で射影
+		float dist = MyMathUtility::Dot(d, obb.orientations[i]);
+
+		// OBBのサイズ（半幅）でクランプ
+		dist = std::clamp(dist, -sizes[i], sizes[i]);
+
+		// OBBの中心に、各軸方向のクランプされた距離を足していく
+		closestPoint.x += obb.orientations[i].x * dist;
+		closestPoint.y += obb.orientations[i].y * dist;
+		closestPoint.z += obb.orientations[i].z * dist;
+	}
+
+	// 3. 最近接点と球の中心の距離の2乗を計算
+	Vector3 diff = MyMathUtility::Subtract(closestPoint, sphere.center);
+	float distanceSquared = MyMathUtility::LengthSquared(diff);
+
+	// 4. 距離の2乗が半径の2乗以下なら衝突
+	return distanceSquared <= (sphere.radius * sphere.radius);
+}
+
+void DrawOBB(const OBB& obb, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
+	// OBBの8頂点を定義（ローカルオフセットの組み合わせ）
+	Vector3 localVertices[8] = {
+	    {-obb.size.x, -obb.size.y, -obb.size.z},
+        {obb.size.x,  -obb.size.y, -obb.size.z},
+        {-obb.size.x, obb.size.y,  -obb.size.z},
+        {obb.size.x,  obb.size.y,  -obb.size.z},
+	    {-obb.size.x, -obb.size.y, obb.size.z },
+        {obb.size.x,  -obb.size.y, obb.size.z },
+        {-obb.size.x, obb.size.y,  obb.size.z },
+        {obb.size.x,  obb.size.y,  obb.size.z },
+	};
+
+	Vector3 worldVertices[8];
+	Vector3 screenVertices[8];
+
+	for (int i = 0; i < 8; ++i) {
+		// ローカル座標からワールド座標に変換 (中心 + 各軸 × オフセット)
+		worldVertices[i] = obb.center;
+		worldVertices[i].x += obb.orientations[0].x * localVertices[i].x + obb.orientations[1].x * localVertices[i].y + obb.orientations[2].x * localVertices[i].z;
+		worldVertices[i].y += obb.orientations[0].y * localVertices[i].x + obb.orientations[1].y * localVertices[i].y + obb.orientations[2].y * localVertices[i].z;
+		worldVertices[i].z += obb.orientations[0].z * localVertices[i].x + obb.orientations[1].z * localVertices[i].y + obb.orientations[2].z * localVertices[i].z;
+
+		// ビュー・プロジェクション変換
+		Vector3 ndcVertex = MyMathUtility::Transform(worldVertices[i], viewProjectionMatrix);
+		// スクリーン（ビューポート）変換
+		screenVertices[i] = MyMathUtility::Transform(ndcVertex, viewportMatrix);
+	}
+
+	// 12本の辺を描画
+	// 手前の面
+	Novice::DrawLine((int)screenVertices[0].x, (int)screenVertices[0].y, (int)screenVertices[1].x, (int)screenVertices[1].y, color);
+	Novice::DrawLine((int)screenVertices[1].x, (int)screenVertices[1].y, (int)screenVertices[3].x, (int)screenVertices[3].y, color);
+	Novice::DrawLine((int)screenVertices[3].x, (int)screenVertices[3].y, (int)screenVertices[2].x, (int)screenVertices[2].y, color);
+	Novice::DrawLine((int)screenVertices[2].x, (int)screenVertices[2].y, (int)screenVertices[0].x, (int)screenVertices[0].y, color);
+
+	// 奥の面
+	Novice::DrawLine((int)screenVertices[4].x, (int)screenVertices[4].y, (int)screenVertices[5].x, (int)screenVertices[5].y, color);
+	Novice::DrawLine((int)screenVertices[5].x, (int)screenVertices[5].y, (int)screenVertices[7].x, (int)screenVertices[7].y, color);
+	Novice::DrawLine((int)screenVertices[7].x, (int)screenVertices[7].y, (int)screenVertices[6].x, (int)screenVertices[6].y, color);
+	Novice::DrawLine((int)screenVertices[6].x, (int)screenVertices[6].y, (int)screenVertices[4].x, (int)screenVertices[4].y, color);
+
+	// 手前と奥を繋ぐ4本
+	Novice::DrawLine((int)screenVertices[0].x, (int)screenVertices[0].y, (int)screenVertices[4].x, (int)screenVertices[4].y, color);
+	Novice::DrawLine((int)screenVertices[1].x, (int)screenVertices[1].y, (int)screenVertices[5].x, (int)screenVertices[5].y, color);
+	Novice::DrawLine((int)screenVertices[2].x, (int)screenVertices[2].y, (int)screenVertices[6].x, (int)screenVertices[6].y, color);
+	Novice::DrawLine((int)screenVertices[3].x, (int)screenVertices[3].y, (int)screenVertices[7].x, (int)screenVertices[7].y, color);
 }
 
 void DrawAABB(const AABB& aabb, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
@@ -409,16 +496,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	float cameraSpeed = 0.08f;
 	float mouseSensitivity = 0.005f; // マウスの感度調整
 
-	// --- main関数内の変数初期化セクション ---
-	AABB aabb = {
-	    {-0.5f, -0.5f, -0.5f}, // min
-	    {0.5f,  0.5f,  0.5f }  // max
-	};
+	// OBB回転用角度(ラジアン)をImGuiで操作するための変数
+	Vector3 obbRotate = {0.0f, 0.0f, 0.0f};
 
-	Segment segment = {
-		.origin{-0.7f,0.3f,0.0f},
-        .diff{2.0f,-0.5f,0.0f}
-	};
+	OBB obb{
+	    .center{-1.0f,              0.0f,               0.0f              },
+
+	    .orientations{{1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}},
+
+	    .size{0.5f,               0.5f,               0.5f              }
+    };
+
+	Sphere sphere{
+	    .center{0.0f, 0.0f, 0.0f},
+        .radius{0.5}
+    };
 
 	while (Novice::ProcessMessage() == 0) {
 		Novice::BeginFrame();
@@ -481,30 +573,34 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			cameraRotate = {0.45f, 0.0f, 0.0f};
 		}
 
-		// AABBの最小・最大逆転防止ガード
-		AABB validAABB = {
-		    {(std::min)(aabb.min.x, aabb.max.x), (std::min)(aabb.min.y, aabb.max.y), (std::min)(aabb.min.z, aabb.max.z)},
-		    {(std::max)(aabb.min.x, aabb.max.x), (std::max)(aabb.min.y, aabb.max.y), (std::max)(aabb.min.z, aabb.max.z)}
-        };
+		//ImGuiの回転角から回転行列をつくり、各軸ベクトルを計算
+		Matrix4x4 obbRotM = MyMathUtility::Multiply(
+		    MyMathUtility::Multiply(MyMathUtility::MakeRotateXMatrix(obbRotate.x), MyMathUtility::MakeRotateYMatrix(obbRotate.y)), MyMathUtility::MakeRotateZMatrix(obbRotate.z));
+
+		// 回転行列の各列(または行)から、回転後のXYZ軸ベクトルを抽出
+		obb.orientations[0] = {obbRotM.m[0][0], obbRotM.m[0][1], obbRotM.m[0][2]};
+		obb.orientations[1] = {obbRotM.m[1][0], obbRotM.m[1][1], obbRotM.m[1][2]};
+		obb.orientations[2] = {obbRotM.m[2][0], obbRotM.m[2][1], obbRotM.m[2][2]};
 
 		// 衝突判定
-		bool isColliding = IsCollision(validAABB, segment);
+		bool isColliding = IsCollision(obb, sphere);
 
 		// ===================================
 		// ImGui の処理
 		// ===================================
 
-		ImGui::Begin("AABB to Segment Window");
+		ImGui::Begin("OBB to Sphere Window");
 
-		ImGui::Text("--- AABB ---");
-		ImGui::DragFloat3("AABB Min", &aabb.min.x, 0.02f);
-		ImGui::DragFloat3("AABB Max", &aabb.max.x, 0.02f);
+		ImGui::Text("--- OBB ---");
+		ImGui::DragFloat3("OBB Center", &obb.center.x, 0.02f);
+		ImGui::DragFloat3("OBB Size", &obb.size.x, 0.02f, 0.01f, 10.0f);
+		ImGui::SliderFloat3("OBB Rotate", &obbRotate.x, -float(M_PI), float(M_PI));
 
 		ImGui::Separator();
 
-		ImGui::Text("--- Segment ---");
-		ImGui::DragFloat3("Segment Origin (Start)", &segment.origin.x, 0.02f);
-		ImGui::DragFloat3("Segment Diff (Vector)", &segment.diff.x, 0.02f);
+		ImGui::Text("--- Sphere ---");
+		ImGui::DragFloat3("Sphere Center", &sphere.center.x, 0.02f);
+		ImGui::DragFloat3("Sphere Radius", &sphere.radius, 0.02f, 0.01f, 5.0f);
 
 		ImGui::Separator();
 
@@ -527,15 +623,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		// 描画
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
-		// 衝突していたら線分の色を赤にする
-		uint32_t aabbColor = WHITE;
-		uint32_t segmentColor = isColliding ? RED : WHITE;
+		// 衝突状態に合わせて色を変更
+		uint32_t color = isColliding ? RED : WHITE;
 
-		DrawAABB(validAABB, viewProjectionMatrix, viewportMatrix, aabbColor);
-
-		// 線分の終点を計算して描画
-		Vector3 segmentEnd = MyMathUtility::Add(segment.origin, segment.diff);
-		DrawSegment(segment, viewProjectionMatrix, viewportMatrix, segmentColor);
+		// 各形状の描画
+		DrawOBB(obb, viewProjectionMatrix, viewportMatrix, color);
+		DrawMiniSphere(sphere, viewProjectionMatrix, viewportMatrix, color);
 
 		Novice::EndFrame();
 
