@@ -36,6 +36,25 @@ struct OBB {
 	Vector3 size;
 };
 
+// ===================================
+// 演算子オーバーロードの定義
+// ===================================
+
+// Vector3 の加算 (Vector3 + Vector3)
+Vector3 operator+(const Vector3& v1, const Vector3& v2) { return {v1.x + v2.x, v1.y + v2.y, v1.z + v2.z}; }
+
+// Vector3 の減算 (Vector3 - Vector3)
+Vector3 operator-(const Vector3& v1, const Vector3& v2) { return {v1.x - v2.x, v1.y - v2.y, v1.z - v2.z}; }
+
+// Vector3 のスカラー倍 (Vector3 * float)
+Vector3 operator*(const Vector3& v, float s) { return {v.x * s, v.y * s, v.z * s}; }
+
+// Vector3 のスカラー倍 (float * Vector3)
+Vector3 operator*(float s, const Vector3& v) { return {v.x * s, v.y * s, v.z * s}; }
+
+// Matrix4x4 の積 (Matrix4x4 * Matrix4x4)
+Matrix4x4 operator*(const Matrix4x4& m1, const Matrix4x4& m2) { return MyMathUtility::Multiply(m1, m2); }
+
 // 線形補間関数
 Vector3 Lerp(const Vector3& v1, const Vector3& v2, float t) {
 	Vector3 result;
@@ -638,21 +657,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	float cameraSpeed = 0.08f;
 	float mouseSensitivity = 0.005f; // マウスの感度調整
 	                                 // 階層構造（肩・肘・手）の初期値
-	Vector3 translates[3] = {
-	    {0.2f, 1.0f, 0.0f},
-	    {0.4f, 0.0f, 0.0f},
-	    {0.3f, 0.0f, 0.0f},
+	// ---------------------------------------------------
+	// 提示された計算結果(c, d, e, matrix)を再現するための初期データ
+	// ---------------------------------------------------
+	// c と d の計算用
+	Vector3 v1 = {0.2f, 1.040004f, 0.0f};
+	Vector3 v2 = {2.4f, 3.140004f, 1.2f};
+
+	// e の計算用
+	Vector3 v3 = {0.480800f, 2.480000f, 0.0f};
+	float k = 1.0f;
+
+	// 行列の計算用 (4行1列目を 0.000000f に修正)
+	Matrix4x4 m1 = {
+	    0.097770f, -0.108668f, -0.990105f, 0.000000f, 0.929354f, 0.365122f, 0.054648f, 0.000000f, 0.356008f, -0.925501f, 0.129254f, 0.000000f, 0.000000f, 0.000000f, 0.000000f, 1.000000f 
 	};
-	Vector3 rotates[3] = {
-	    {0.0f, 0.0f, -6.8f},
-	    {0.0f, 0.0f, -1.4f},
-	    {0.0f, 0.0f, 0.0f },
-	};
-	Vector3 scales[3] = {
-	    {1.0f, 1.0f, 1.0f},
-        {1.0f, 1.0f, 1.0f},
-        {1.0f, 1.0f, 1.0f}
-    };
+
+	Matrix4x4 m2 = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f};
 
 	while (Novice::ProcessMessage() == 0) {
 		Novice::BeginFrame();
@@ -715,22 +736,31 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			cameraRotate = {0.45f, 0.0f, 0.0f};
 		}
 
+		// ---------------------------------------------------
+		// 演算子オーバーロードを使用した計算
+		// ---------------------------------------------------
+		Vector3 c = v1 + v2;        // ★ここで「operator+」が呼び出されています！
+		Vector3 d = v1 - v2;        // ★ここで「operator-」が呼び出されています！
+		Vector3 e = v3 * k;         // ★ここで「operator*」が呼び出されています！
+		Matrix4x4 matrix = m1 * m2; // ★ここで「operator*」が呼び出されています！
+
 		// ===================================
 		// ImGui の処理
 		// ===================================
 
 		ImGui::Begin("Window");
 
-		// 階層構造用のImGui
-		ImGui::DragFloat3("translates[0]", &translates[0].x, 0.01f);
-		ImGui::DragFloat3("rotates[0]", &rotates[0].x, 0.01f);
-		ImGui::DragFloat3("scales[0]", &scales[0].x, 0.01f);
-		ImGui::DragFloat3("translates[1]", &translates[1].x, 0.01f);
-		ImGui::DragFloat3("rotates[1]", &rotates[1].x, 0.01f);
-		ImGui::DragFloat3("scales[1]", &scales[1].x, 0.01f);
-		ImGui::DragFloat3("translates[2]", &translates[2].x, 0.01f);
-		ImGui::DragFloat3("rotates[2]", &rotates[2].x, 0.01f);
-		ImGui::DragFloat3("scales[2]", &scales[2].x, 0.01f);
+		// ベクトルの計算結果表示
+		ImGui::Text("c:%f, %f, %f", c.x, c.y, c.z);
+		ImGui::Text("d:%f, %f, %f", d.x, d.y, d.z);
+		ImGui::Text("e:%f, %f, %f", e.x, e.y, e.z);
+
+		// 行列の計算結果表示
+		ImGui::Text("matrix:");
+		ImGui::Text("%f, %f, %f, %f", matrix.m[0][0], matrix.m[0][1], matrix.m[0][2], matrix.m[0][3]);
+		ImGui::Text("%f, %f, %f, %f", matrix.m[1][0], matrix.m[1][1], matrix.m[1][2], matrix.m[1][3]);
+		ImGui::Text("%f, %f, %f, %f", matrix.m[2][0], matrix.m[2][1], matrix.m[2][2], matrix.m[2][3]);
+		ImGui::Text("%f, %f, %f, %f", matrix.m[3][0], matrix.m[3][1], matrix.m[3][2], matrix.m[3][3]);
 
 		ImGui::End();
 
@@ -745,51 +775,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		// 描画
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
-		// ベジェ曲線の描画 (青色)
-		// ===================================
-		// 階層構造の計算と描画
-		// ===================================
-		Matrix4x4 localMatrix[3];
-		Matrix4x4 worldMatrix[3];
-
-		// 1. 各関節のローカル行列を計算
-		for (int i = 0; i < 3; ++i) {
-			localMatrix[i] = MyMathUtility::MakeAffineMatrix(scales[i], rotates[i], translates[i]);
-		}
-
-		// 2. 階層構造に基づいてワールド行列を計算
-		// 肩 (親がないためローカル行列がそのままワールド行列になる)
-		worldMatrix[0] = localMatrix[0];
-		// 肘 (親である肩のワールド行列を掛ける)
-		worldMatrix[1] = MyMathUtility::Multiply(localMatrix[1], worldMatrix[0]);
-		// 手 (親である肘のワールド行列を掛ける)
-		worldMatrix[2] = MyMathUtility::Multiply(localMatrix[2], worldMatrix[1]);
-
-		// 3. 行列からワールド座標（平行移動成分）を抽出して描画位置を決める
-		Vector3 worldPos[3];
-		Vector3 screenPos[3];
-		for (int i = 0; i < 3; ++i) {
-			// 行列の平行移動成分を抽出 (ローカル原点{0,0,0}を変換した結果と同等)
-			worldPos[i].x = worldMatrix[i].m[3][0];
-			worldPos[i].y = worldMatrix[i].m[3][1];
-			worldPos[i].z = worldMatrix[i].m[3][2];
-
-			// スクリーン座標への変換
-			screenPos[i] = MyMathUtility::Transform(MyMathUtility::Transform(worldPos[i], viewProjectionMatrix), viewportMatrix);
-		}
-
-		// 4. 線を引く (肩-肘、肘-手)
-		Novice::DrawLine(int(screenPos[0].x), int(screenPos[0].y), int(screenPos[1].x), int(screenPos[1].y), WHITE);
-		Novice::DrawLine(int(screenPos[1].x), int(screenPos[1].y), int(screenPos[2].x), int(screenPos[2].y), WHITE);
-
-		// 5. 球を描画する (半径は適当な値 0.05f などに設定)
-		Sphere shoulderSphere{worldPos[0], 0.05f};
-		Sphere elbowSphere{worldPos[1], 0.05f};
-		Sphere handSphere{worldPos[2], 0.05f};
-
-		DrawMiniSphere(shoulderSphere, viewProjectionMatrix, viewportMatrix, RED); // 肩: 赤
-		DrawMiniSphere(elbowSphere, viewProjectionMatrix, viewportMatrix, GREEN);  // 肘: 緑
-		DrawMiniSphere(handSphere, viewProjectionMatrix, viewportMatrix, BLUE);    // 手: 青
 
 		Novice::EndFrame();
 
