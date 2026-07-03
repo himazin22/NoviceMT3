@@ -36,6 +36,41 @@ struct OBB {
 	Vector3 size;
 };
 
+// 線形補間関数
+Vector3 Lerp(const Vector3& v1, const Vector3& v2, float t) {
+	Vector3 result;
+	result.x = v1.x + (v2.x - v1.x) * t;
+	result.y = v1.y + (v2.y - v1.y) * t;
+	result.z = v1.z + (v2.z - v1.z) * t;
+	return result;
+}
+
+// 2次ベジェ曲線の描画関数
+void DrawBezier(const Vector3& controlPoint0, const Vector3& controlPoint1, const Vector3& controlPoint2, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
+	const int kSubdivision = 32; // 曲線の滑らかさを決める分割数
+	Vector3 prevPoint = controlPoint0;
+
+	for (int i = 1; i <= kSubdivision; ++i) {
+		float t = static_cast<float>(i) / kSubdivision;
+
+		// 制御点p0, p1を線形補間
+		Vector3 p0p1 = Lerp(controlPoint0, controlPoint1, t);
+		// 制御点p1, p2を線形補間
+		Vector3 p1p2 = Lerp(controlPoint1, controlPoint2, t);
+		// 補間点p0p1, p1p2をさらに線形補間して曲線上の点pを求める
+		Vector3 p = Lerp(p0p1, p1p2, t);
+
+		// スクリーン座標に変換
+		Vector3 screenPrev = MyMathUtility::Transform(MyMathUtility::Transform(prevPoint, viewProjectionMatrix), viewportMatrix);
+		Vector3 screenP = MyMathUtility::Transform(MyMathUtility::Transform(p, viewProjectionMatrix), viewportMatrix);
+
+		// 直前の点から現在の点へ線を引く
+		Novice::DrawLine(static_cast<int>(screenPrev.x), static_cast<int>(screenPrev.y), static_cast<int>(screenP.x), static_cast<int>(screenP.y), color);
+
+		prevPoint = p;
+	}
+}
+
 // 球と球の衝突判定関数
 bool IsCollision(const Sphere& s1, const Sphere& s2) {
 	float distance = MyMathUtility::Length(MyMathUtility::Subtract(s2.center, s1.center));
@@ -603,20 +638,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	float cameraSpeed = 0.08f;
 	float mouseSensitivity = 0.005f; // マウスの感度調整
 
-	// OBB回転用角度(ラジアン)をImGuiで操作するための変数
-	Vector3 obb1Rotate = {0.0f, 0.0f, 0.0f};
-	Vector3 obb2Rotate = {0.0f, 0.0f, 0.0f};
-	OBB obb1{
-	    .center{-1.0f,              1.0f,               0.0f              },
-        .orientations{{1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}},
-        .size{0.5f,               0.5f,               0.5f              }
-    };
-
-
-	OBB obb2{
-	    .center{1.0f,               1.0f,               0.0f              },
-        .orientations{{1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}},
-        .size{0.5f,               0.5f,               0.5f              }
+	// ベジェ曲線のコントロールポイント初期値
+	Vector3 controlPoints[3] = {
+	    {-0.8f, 0.58f, 1.0f },
+        {1.76f, 1.0f,  -0.3f},
+        {0.94f, -0.7f, 2.3f }
     };
 
 	while (Novice::ProcessMessage() == 0) {
@@ -680,42 +706,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			cameraRotate = {0.45f, 0.0f, 0.0f};
 		}
 
-		// OBB1の回転適用
-		Matrix4x4 obb1RotM = MyMathUtility::Multiply(
-		    MyMathUtility::Multiply(MyMathUtility::MakeRotateXMatrix(obb1Rotate.x), MyMathUtility::MakeRotateYMatrix(obb1Rotate.y)), MyMathUtility::MakeRotateZMatrix(obb1Rotate.z));
-		obb1.orientations[0] = {obb1RotM.m[0][0], obb1RotM.m[0][1], obb1RotM.m[0][2]};
-		obb1.orientations[1] = {obb1RotM.m[1][0], obb1RotM.m[1][1], obb1RotM.m[1][2]};
-		obb1.orientations[2] = {obb1RotM.m[2][0], obb1RotM.m[2][1], obb1RotM.m[2][2]};
-
-		// OBB2の回転適用
-		Matrix4x4 obb2RotM = MyMathUtility::Multiply(
-		    MyMathUtility::Multiply(MyMathUtility::MakeRotateXMatrix(obb2Rotate.x), MyMathUtility::MakeRotateYMatrix(obb2Rotate.y)), MyMathUtility::MakeRotateZMatrix(obb2Rotate.z));
-		obb2.orientations[0] = {obb2RotM.m[0][0], obb2RotM.m[0][1], obb2RotM.m[0][2]};
-		obb2.orientations[1] = {obb2RotM.m[1][0], obb2RotM.m[1][1], obb2RotM.m[1][2]};
-		obb2.orientations[2] = {obb2RotM.m[2][0], obb2RotM.m[2][1], obb2RotM.m[2][2]};
-
-		// 衝突判定
-		bool isColliding = IsCollision(obb1, obb2);
-
 		// ===================================
 		// ImGui の処理
 		// ===================================
 
-		// 3. ImGuiの描画（確認用にSegmentのデバッグを追加すると便利です）
-		ImGui::Begin("OBB to OBB Window");
-		ImGui::Text("--- OBB 1 ---");
-		ImGui::DragFloat3("OBB1 Center", &obb1.center.x, 0.02f);
-		ImGui::SliderFloat3("OBB1 Rotate", &obb1Rotate.x, -float(M_PI), float(M_PI));
-
-		ImGui::Text("--- OBB 2 ---");
-		ImGui::DragFloat3("OBB2 Center", &obb2.center.x, 0.02f);
-		ImGui::SliderFloat3("OBB2 Rotate", &obb2Rotate.x, -float(M_PI), float(M_PI));
-
-		if (isColliding) {
-			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "STATUS: HIT!!");
-		} else {
-			ImGui::Text("STATUS: Safe");
-		}
+		ImGui::Begin("Window");
+		ImGui::DragFloat3("controlPoints[0]", &controlPoints[0].x, 0.01f);
+		ImGui::DragFloat3("controlPoints[1]", &controlPoints[1].x, 0.01f);
+		ImGui::DragFloat3("controlPoints[2]", &controlPoints[2].x, 0.01f);
 		ImGui::End();
 
 		// ビュー・プロジェクション計算
@@ -729,10 +727,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		// 描画
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
-		// 衝突状態に合わせて色を変更
-		uint32_t drawColor = isColliding ? RED : WHITE;
-		DrawOBB(obb1, viewProjectionMatrix, viewportMatrix, drawColor);
-		DrawOBB(obb2, viewProjectionMatrix, viewportMatrix, drawColor);
+		// ベジェ曲線の描画 (青色)
+		DrawBezier(controlPoints[0], controlPoints[1], controlPoints[2], viewProjectionMatrix, viewportMatrix, BLUE);
+
+		// コントロールポイントを黒い球で描画 (半径0.01f)
+		Sphere cpSphere0{controlPoints[0], 0.01f};
+		Sphere cpSphere1{controlPoints[1], 0.01f};
+		Sphere cpSphere2{controlPoints[2], 0.01f};
+		DrawMiniSphere(cpSphere0, viewProjectionMatrix, viewportMatrix, BLACK);
+		DrawMiniSphere(cpSphere1, viewProjectionMatrix, viewportMatrix, BLACK);
+		DrawMiniSphere(cpSphere2, viewProjectionMatrix, viewportMatrix, BLACK);
 
 		Novice::EndFrame();
 
