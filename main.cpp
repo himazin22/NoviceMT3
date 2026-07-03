@@ -637,12 +637,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Vector3 cameraRotate{0.45f, 0.0f, 0.0f};
 	float cameraSpeed = 0.08f;
 	float mouseSensitivity = 0.005f; // マウスの感度調整
-
-	// ベジェ曲線のコントロールポイント初期値
-	Vector3 controlPoints[3] = {
-	    {-0.8f, 0.58f, 1.0f },
-        {1.76f, 1.0f,  -0.3f},
-        {0.94f, -0.7f, 2.3f }
+	                                 // 階層構造（肩・肘・手）の初期値
+	Vector3 translates[3] = {
+	    {0.2f, 1.0f, 0.0f},
+	    {0.4f, 0.0f, 0.0f},
+	    {0.3f, 0.0f, 0.0f},
+	};
+	Vector3 rotates[3] = {
+	    {0.0f, 0.0f, -6.8f},
+	    {0.0f, 0.0f, -1.4f},
+	    {0.0f, 0.0f, 0.0f },
+	};
+	Vector3 scales[3] = {
+	    {1.0f, 1.0f, 1.0f},
+        {1.0f, 1.0f, 1.0f},
+        {1.0f, 1.0f, 1.0f}
     };
 
 	while (Novice::ProcessMessage() == 0) {
@@ -711,9 +720,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// ===================================
 
 		ImGui::Begin("Window");
-		ImGui::DragFloat3("controlPoints[0]", &controlPoints[0].x, 0.01f);
-		ImGui::DragFloat3("controlPoints[1]", &controlPoints[1].x, 0.01f);
-		ImGui::DragFloat3("controlPoints[2]", &controlPoints[2].x, 0.01f);
+
+		// 階層構造用のImGui
+		ImGui::DragFloat3("translates[0]", &translates[0].x, 0.01f);
+		ImGui::DragFloat3("rotates[0]", &rotates[0].x, 0.01f);
+		ImGui::DragFloat3("scales[0]", &scales[0].x, 0.01f);
+		ImGui::DragFloat3("translates[1]", &translates[1].x, 0.01f);
+		ImGui::DragFloat3("rotates[1]", &rotates[1].x, 0.01f);
+		ImGui::DragFloat3("scales[1]", &scales[1].x, 0.01f);
+		ImGui::DragFloat3("translates[2]", &translates[2].x, 0.01f);
+		ImGui::DragFloat3("rotates[2]", &rotates[2].x, 0.01f);
+		ImGui::DragFloat3("scales[2]", &scales[2].x, 0.01f);
+
 		ImGui::End();
 
 		// ビュー・プロジェクション計算
@@ -728,15 +746,50 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 描画
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 		// ベジェ曲線の描画 (青色)
-		DrawBezier(controlPoints[0], controlPoints[1], controlPoints[2], viewProjectionMatrix, viewportMatrix, BLUE);
+		// ===================================
+		// 階層構造の計算と描画
+		// ===================================
+		Matrix4x4 localMatrix[3];
+		Matrix4x4 worldMatrix[3];
 
-		// コントロールポイントを黒い球で描画 (半径0.01f)
-		Sphere cpSphere0{controlPoints[0], 0.01f};
-		Sphere cpSphere1{controlPoints[1], 0.01f};
-		Sphere cpSphere2{controlPoints[2], 0.01f};
-		DrawMiniSphere(cpSphere0, viewProjectionMatrix, viewportMatrix, BLACK);
-		DrawMiniSphere(cpSphere1, viewProjectionMatrix, viewportMatrix, BLACK);
-		DrawMiniSphere(cpSphere2, viewProjectionMatrix, viewportMatrix, BLACK);
+		// 1. 各関節のローカル行列を計算
+		for (int i = 0; i < 3; ++i) {
+			localMatrix[i] = MyMathUtility::MakeAffineMatrix(scales[i], rotates[i], translates[i]);
+		}
+
+		// 2. 階層構造に基づいてワールド行列を計算
+		// 肩 (親がないためローカル行列がそのままワールド行列になる)
+		worldMatrix[0] = localMatrix[0];
+		// 肘 (親である肩のワールド行列を掛ける)
+		worldMatrix[1] = MyMathUtility::Multiply(localMatrix[1], worldMatrix[0]);
+		// 手 (親である肘のワールド行列を掛ける)
+		worldMatrix[2] = MyMathUtility::Multiply(localMatrix[2], worldMatrix[1]);
+
+		// 3. 行列からワールド座標（平行移動成分）を抽出して描画位置を決める
+		Vector3 worldPos[3];
+		Vector3 screenPos[3];
+		for (int i = 0; i < 3; ++i) {
+			// 行列の平行移動成分を抽出 (ローカル原点{0,0,0}を変換した結果と同等)
+			worldPos[i].x = worldMatrix[i].m[3][0];
+			worldPos[i].y = worldMatrix[i].m[3][1];
+			worldPos[i].z = worldMatrix[i].m[3][2];
+
+			// スクリーン座標への変換
+			screenPos[i] = MyMathUtility::Transform(MyMathUtility::Transform(worldPos[i], viewProjectionMatrix), viewportMatrix);
+		}
+
+		// 4. 線を引く (肩-肘、肘-手)
+		Novice::DrawLine(int(screenPos[0].x), int(screenPos[0].y), int(screenPos[1].x), int(screenPos[1].y), WHITE);
+		Novice::DrawLine(int(screenPos[1].x), int(screenPos[1].y), int(screenPos[2].x), int(screenPos[2].y), WHITE);
+
+		// 5. 球を描画する (半径は適当な値 0.05f などに設定)
+		Sphere shoulderSphere{worldPos[0], 0.05f};
+		Sphere elbowSphere{worldPos[1], 0.05f};
+		Sphere handSphere{worldPos[2], 0.05f};
+
+		DrawMiniSphere(shoulderSphere, viewProjectionMatrix, viewportMatrix, RED); // 肩: 赤
+		DrawMiniSphere(elbowSphere, viewProjectionMatrix, viewportMatrix, GREEN);  // 肘: 緑
+		DrawMiniSphere(handSphere, viewProjectionMatrix, viewportMatrix, BLUE);    // 手: 青
 
 		Novice::EndFrame();
 
