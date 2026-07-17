@@ -128,13 +128,8 @@ bool IsCollision(const Sphere& s1, const Sphere& s2) {
 }
 
 bool IsCollision(const Sphere& s1, const Plane& p1) {
-	// 1. 球の中心点と、平面の法線ベクトルとの内積を計算
 	float dot = MyMathUtility::Dot(s1.center, p1.normal);
-
-	// 2. 内積から平面の距離を引いて絶対値をとり、平面からの最短距離を求める
 	float distance = std::abs(dot - p1.distance);
-
-	// 3. 最短距離が球の半径以下なら衝突している
 	if (distance <= s1.radius) {
 		return true;
 	}
@@ -143,73 +138,53 @@ bool IsCollision(const Sphere& s1, const Plane& p1) {
 
 // 線分と平面の衝突判定関数
 bool IsCollision(const Segment& segment, const Plane& plane) {
-	// 1. 法線と線の差分ベクトルの内積を求める（垂直＝平行判定のため）
 	float dot = MyMathUtility::Dot(plane.normal, segment.diff);
-
-	// 2. 平行である場合は衝突しない（分母が0になるのを防ぐ）
 	if (dot == 0.0f) {
 		return false;
 	}
-
-	// 3. スライドの数式から比率 t を求める
 	float t = (plane.distance - MyMathUtility::Dot(segment.origin, plane.normal)) / dot;
-
-	// 4. t の値が 0.0f ～ 1.0f の範囲にあれば、線分の範囲内で衝突している
 	if (t >= 0.0f && t <= 1.0f) {
 		return true;
 	}
-
 	return false;
 }
 
 // AABBとAABBの衝突判定
 bool IsCollision(const AABB& aabb1, const AABB& aabb2) {
-	if ((aabb1.min.x <= aabb2.max.x && aabb1.max.x >= aabb2.min.x) && // X軸の重なり
-	    (aabb1.min.y <= aabb2.max.y && aabb1.max.y >= aabb2.min.y) && // Y軸の重なり
-	    (aabb1.min.z <= aabb2.max.z && aabb1.max.z >= aabb2.min.z))   // Z軸の重なり
-	{
-		return true; // すべての軸で重なっていれば衝突
+	if ((aabb1.min.x <= aabb2.max.x && aabb1.max.x >= aabb2.min.x) && (aabb1.min.y <= aabb2.max.y && aabb1.max.y >= aabb2.min.y) && (aabb1.min.z <= aabb2.max.z && aabb1.max.z >= aabb2.min.z)) {
+		return true;
 	}
 	return false;
 }
 
 // 三角形と線分の衝突判定関数
 bool IsCollision(const Triangle& triangle, const Segment& segment) {
-	// 1. 三角形の各頂点を取り出す
 	Vector3 v0 = triangle.Vvertices[0];
 	Vector3 v1 = triangle.Vvertices[1];
 	Vector3 v2 = triangle.Vvertices[2];
 
-	// 各辺のベクトル
 	Vector3 v01 = MyMathUtility::Subtract(v1, v0);
 	Vector3 v12 = MyMathUtility::Subtract(v2, v1);
 	Vector3 v20 = MyMathUtility::Subtract(v0, v2);
 
-	// 2. 三角形がなす平面の法線と距離を計算
 	Vector3 v02 = MyMathUtility::Subtract(v2, v0);
 	Vector3 normal = MyMathUtility::Normalize(MyMathUtility::Cross(v01, v02));
 	float distance = MyMathUtility::Dot(normal, v0);
 
-	// 3. 線分と平面の交点(p)を求める
 	float dot = MyMathUtility::Dot(normal, segment.diff);
 
-	// 平行である場合は衝突しない（分母が0になるのを防ぐ）
 	if (dot == 0.0f) {
 		return false;
 	}
 
-	// 比率 t を求める
 	float t = (distance - MyMathUtility::Dot(segment.origin, normal)) / dot;
 
-	// t の値が 0.0f ～ 1.0f の範囲に外れていれば、線分の範囲内で衝突していない
 	if (t < 0.0f || t > 1.0f) {
 		return false;
 	}
 
-	// 衝突点 p を計算
 	Vector3 p = MyMathUtility::Add(segment.origin, MyMathUtility::Multiply(t, segment.diff));
 
-	// 4. 交点 p が三角形の内側にあるかを判定（資料の擬似コードより）
 	Vector3 v0p = MyMathUtility::Subtract(p, v0);
 	Vector3 v1p = MyMathUtility::Subtract(p, v1);
 	Vector3 v2p = MyMathUtility::Subtract(p, v2);
@@ -218,7 +193,6 @@ bool IsCollision(const Triangle& triangle, const Segment& segment) {
 	Vector3 cross12 = MyMathUtility::Cross(v12, v2p);
 	Vector3 cross20 = MyMathUtility::Cross(v20, v0p);
 
-	// すべての小三角形のクロス積と法線が同じ方向を向いていたら衝突
 	if (MyMathUtility::Dot(cross01, normal) >= 0.0f && MyMathUtility::Dot(cross12, normal) >= 0.0f && MyMathUtility::Dot(cross20, normal) >= 0.0f) {
 		return true;
 	}
@@ -227,16 +201,13 @@ bool IsCollision(const Triangle& triangle, const Segment& segment) {
 }
 
 bool IsCollision(const AABB& aabb, const Sphere& sphere) {
-	// AABB上の最も球の中心に近い点（最近接点）を求める
 	Vector3 closestPoint;
 	closestPoint.x = (std::clamp)(sphere.center.x, aabb.min.x, aabb.max.x);
 	closestPoint.y = (std::clamp)(sphere.center.y, aabb.min.y, aabb.max.y);
 	closestPoint.z = (std::clamp)(sphere.center.z, aabb.min.z, aabb.max.z);
 
-	// 最近接点と球の中心との距離を求める
 	float distance = MyMathUtility::Length(MyMathUtility::Subtract(closestPoint, sphere.center));
 
-	// 距離が半径以下なら衝突している
 	if (distance <= sphere.radius) {
 		return true;
 	}
@@ -244,31 +215,24 @@ bool IsCollision(const AABB& aabb, const Sphere& sphere) {
 }
 
 bool IsCollision(const AABB& aabb, const Segment& segment) {
-	// 各軸における進入時間(tMin)と退出時間(tMax)の初期値を設定 (線分なので 0.0f から 1.0f の範囲)
 	float tMin = 0.0f;
 	float tMax = 1.0f;
 
-	// --- X軸の判定 ---
 	if (std::abs(segment.diff.x) < 0.0001f) {
-		// 線分がX軸に対して平行な場合、始点がAABBの外にあれば衝突しない
 		if (segment.origin.x < aabb.min.x || segment.origin.x > aabb.max.x) {
 			return false;
 		}
 	} else {
-		// 各面への到達時間を計算
 		float t1 = (aabb.min.x - segment.origin.x) / segment.diff.x;
 		float t2 = (aabb.max.x - segment.origin.x) / segment.diff.x;
-		// 進入面と退出面を正しくソート
 		float tNear = (std::min)(t1, t2);
 		float tFar = (std::max)(t1, t2);
-		// 全体の時間範囲を狭めていく
 		tMin = (std::max)(tMin, tNear);
 		tMax = (std::min)(tMax, tFar);
 		if (tMin > tMax)
-			return false; // 矛盾が生じたら衝突していない
+			return false;
 	}
 
-	// --- Y軸の判定 ---
 	if (std::abs(segment.diff.y) < 0.0001f) {
 		if (segment.origin.y < aabb.min.y || segment.origin.y > aabb.max.y) {
 			return false;
@@ -284,7 +248,6 @@ bool IsCollision(const AABB& aabb, const Segment& segment) {
 			return false;
 	}
 
-	// --- Z軸の判定 ---
 	if (std::abs(segment.diff.z) < 0.0001f) {
 		if (segment.origin.z < aabb.min.z || segment.origin.z > aabb.max.z) {
 			return false;
@@ -300,49 +263,30 @@ bool IsCollision(const AABB& aabb, const Segment& segment) {
 			return false;
 	}
 
-	// 3軸すべてで重なる時間領域（tMin <= tMax）が存在すれば衝突している
 	return true;
 }
 
 bool IsCollision(const OBB& obb, const Sphere& sphere) {
-	// 1. OBBの中心から球の中心へのベクトルを計算
 	Vector3 d = MyMathUtility::Subtract(sphere.center, obb.center);
-
-	// 最近接点を求めるためのベース（最初はOBBの中心）
 	Vector3 closestPoint = obb.center;
-
-	// 2. OBBの各軸（X, Y, Z）について、球の中心がOBBの範囲外にあればクランプして手繰り寄せる
-	// orientations[0] = X軸, orientations[1] = Y軸, orientations[2] = Z軸
 	float sizes[3] = {obb.size.x, obb.size.y, obb.size.z};
 
 	for (int i = 0; i < 3; ++i) {
-		// OBBの各軸に対する距離を内積で射影
 		float dist = MyMathUtility::Dot(d, obb.orientations[i]);
-
-		// OBBのサイズ（半幅）でクランプ
 		dist = std::clamp(dist, -sizes[i], sizes[i]);
-
-		// OBBの中心に、各軸方向のクランプされた距離を足していく
 		closestPoint.x += obb.orientations[i].x * dist;
 		closestPoint.y += obb.orientations[i].y * dist;
 		closestPoint.z += obb.orientations[i].z * dist;
 	}
 
-	// 3. 最近接点と球の中心の距離の2乗を計算
 	Vector3 diff = MyMathUtility::Subtract(closestPoint, sphere.center);
 	float distanceSquared = MyMathUtility::LengthSquared(diff);
-
-	// 4. 距離の2乗が半径の2乗以下なら衝突
 	return distanceSquared <= (sphere.radius * sphere.radius);
 }
 
-// 線分とOBBの衝突判定関数
 bool IsCollision(const Segment& segment, const OBB& obb) {
-	// 1. OBBのローカル空間へ変換するための、線分の始点をOBB中心からの相対座標にする
 	Vector3 localOrigin = MyMathUtility::Subtract(segment.origin, obb.center);
 
-	// 2. 線分の始点と方向ベクトルを、OBBの各軸に射影（回転の逆変換）する
-	// OBBの orientations は直交しているので、内積（Dot）をとるだけでローカル座標に変換できます。
 	Segment localSegment;
 	localSegment.origin.x = MyMathUtility::Dot(localOrigin, obb.orientations[0]);
 	localSegment.origin.y = MyMathUtility::Dot(localOrigin, obb.orientations[1]);
@@ -352,56 +296,43 @@ bool IsCollision(const Segment& segment, const OBB& obb) {
 	localSegment.diff.y = MyMathUtility::Dot(segment.diff, obb.orientations[1]);
 	localSegment.diff.z = MyMathUtility::Dot(segment.diff, obb.orientations[2]);
 
-	// 3. OBBのサイズから、ローカル空間上でのAABB（min, max）を作成する
 	AABB localAABB;
 	localAABB.min = {-obb.size.x, -obb.size.y, -obb.size.z};
 	localAABB.max = {obb.size.x, obb.size.y, obb.size.z};
 
-	// 4. すでに作成済みの「AABB と Segment の衝突判定」に丸投げする
 	return IsCollision(localAABB, localSegment);
 }
 
-// 分離軸（SAT）の判定用サブ関数
 bool TestAxis(const Vector3& obb1Center, const OBB& obb1, const OBB& obb2, const Vector3& axis) {
-	// 軸がゼロベクトルに近い（外積が平行で潰れた）場合はスキップ
 	float axisLenSq = MyMathUtility::LengthSquared(axis);
 	if (axisLenSq < 0.0001f) {
 		return false;
 	}
 
-	// 単位ベクトル化
 	Vector3 n = MyMathUtility::Normalize(axis);
 
-	// 1. 両OBBの中心間の距離を軸上に射影
 	float centerDist = std::abs(MyMathUtility::Dot(MyMathUtility::Subtract(obb2.center, obb1Center), n));
 
-	// 2. OBB1の半径（軸への射影の最大半幅）を計算
 	float r1 = std::abs(MyMathUtility::Dot(MyMathUtility::Multiply(obb1.size.x, obb1.orientations[0]), n)) +
 	           std::abs(MyMathUtility::Dot(MyMathUtility::Multiply(obb1.size.y, obb1.orientations[1]), n)) +
 	           std::abs(MyMathUtility::Dot(MyMathUtility::Multiply(obb1.size.z, obb1.orientations[2]), n));
 
-	// 3. OBB2の半径（軸への射影の最大半幅）を計算
 	float r2 = std::abs(MyMathUtility::Dot(MyMathUtility::Multiply(obb2.size.x, obb2.orientations[0]), n)) +
 	           std::abs(MyMathUtility::Dot(MyMathUtility::Multiply(obb2.size.y, obb2.orientations[1]), n)) +
 	           std::abs(MyMathUtility::Dot(MyMathUtility::Multiply(obb2.size.z, obb2.orientations[2]), n));
 
-	// 中心間距離が、お互いの半径の合計より大きければ、そこに隙間が存在する（分離している）
 	return centerDist > (r1 + r2);
 }
 
-// OBBとOBBの衝突判定関数
 bool IsCollision(const OBB& obb1, const OBB& obb2) {
-	// OBB1の軸
 	const Vector3& A0 = obb1.orientations[0];
 	const Vector3& A1 = obb1.orientations[1];
 	const Vector3& A2 = obb1.orientations[2];
 
-	// OBB2の軸
 	const Vector3& B0 = obb2.orientations[0];
 	const Vector3& B1 = obb2.orientations[1];
 	const Vector3& B2 = obb2.orientations[2];
 
-	// --- 1. OBB1の面法線（3本） ---
 	if (TestAxis(obb1.center, obb1, obb2, A0))
 		return false;
 	if (TestAxis(obb1.center, obb1, obb2, A1))
@@ -409,7 +340,6 @@ bool IsCollision(const OBB& obb1, const OBB& obb2) {
 	if (TestAxis(obb1.center, obb1, obb2, A2))
 		return false;
 
-	// --- 2. OBB2の面法線（3本） ---
 	if (TestAxis(obb1.center, obb1, obb2, B0))
 		return false;
 	if (TestAxis(obb1.center, obb1, obb2, B1))
@@ -417,7 +347,6 @@ bool IsCollision(const OBB& obb1, const OBB& obb2) {
 	if (TestAxis(obb1.center, obb1, obb2, B2))
 		return false;
 
-	// --- 3. 辺同士の外積（9本） ---
 	if (TestAxis(obb1.center, obb1, obb2, MyMathUtility::Cross(A0, B0)))
 		return false;
 	if (TestAxis(obb1.center, obb1, obb2, MyMathUtility::Cross(A0, B1)))
@@ -439,12 +368,10 @@ bool IsCollision(const OBB& obb1, const OBB& obb2) {
 	if (TestAxis(obb1.center, obb1, obb2, MyMathUtility::Cross(A2, B2)))
 		return false;
 
-	// すべての軸で重ね合わせの隙間がなければ、衝突している
 	return true;
 }
 
 void DrawOBB(const OBB& obb, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
-	// OBBの8頂点を定義（ローカルオフセットの組み合わせ）
 	Vector3 localVertices[8] = {
 	    {-obb.size.x, -obb.size.y, -obb.size.z},
         {obb.size.x,  -obb.size.y, -obb.size.z},
@@ -460,32 +387,25 @@ void DrawOBB(const OBB& obb, const Matrix4x4& viewProjectionMatrix, const Matrix
 	Vector3 screenVertices[8];
 
 	for (int i = 0; i < 8; ++i) {
-		// ローカル座標からワールド座標に変換 (中心 + 各軸 × オフセット)
 		worldVertices[i] = obb.center;
 		worldVertices[i].x += obb.orientations[0].x * localVertices[i].x + obb.orientations[1].x * localVertices[i].y + obb.orientations[2].x * localVertices[i].z;
 		worldVertices[i].y += obb.orientations[0].y * localVertices[i].x + obb.orientations[1].y * localVertices[i].y + obb.orientations[2].y * localVertices[i].z;
 		worldVertices[i].z += obb.orientations[0].z * localVertices[i].x + obb.orientations[1].z * localVertices[i].y + obb.orientations[2].z * localVertices[i].z;
 
-		// ビュー・プロジェクション変換
 		Vector3 ndcVertex = MyMathUtility::Transform(worldVertices[i], viewProjectionMatrix);
-		// スクリーン（ビューポート）変換
 		screenVertices[i] = MyMathUtility::Transform(ndcVertex, viewportMatrix);
 	}
 
-	// 12本の辺を描画
-	// 手前の面
 	Novice::DrawLine((int)screenVertices[0].x, (int)screenVertices[0].y, (int)screenVertices[1].x, (int)screenVertices[1].y, color);
 	Novice::DrawLine((int)screenVertices[1].x, (int)screenVertices[1].y, (int)screenVertices[3].x, (int)screenVertices[3].y, color);
 	Novice::DrawLine((int)screenVertices[3].x, (int)screenVertices[3].y, (int)screenVertices[2].x, (int)screenVertices[2].y, color);
 	Novice::DrawLine((int)screenVertices[2].x, (int)screenVertices[2].y, (int)screenVertices[0].x, (int)screenVertices[0].y, color);
 
-	// 奥の面
 	Novice::DrawLine((int)screenVertices[4].x, (int)screenVertices[4].y, (int)screenVertices[5].x, (int)screenVertices[5].y, color);
 	Novice::DrawLine((int)screenVertices[5].x, (int)screenVertices[5].y, (int)screenVertices[7].x, (int)screenVertices[7].y, color);
 	Novice::DrawLine((int)screenVertices[7].x, (int)screenVertices[7].y, (int)screenVertices[6].x, (int)screenVertices[6].y, color);
 	Novice::DrawLine((int)screenVertices[6].x, (int)screenVertices[6].y, (int)screenVertices[4].x, (int)screenVertices[4].y, color);
 
-	// 手前と奥を繋ぐ4本
 	Novice::DrawLine((int)screenVertices[0].x, (int)screenVertices[0].y, (int)screenVertices[4].x, (int)screenVertices[4].y, color);
 	Novice::DrawLine((int)screenVertices[1].x, (int)screenVertices[1].y, (int)screenVertices[5].x, (int)screenVertices[5].y, color);
 	Novice::DrawLine((int)screenVertices[2].x, (int)screenVertices[2].y, (int)screenVertices[6].x, (int)screenVertices[6].y, color);
@@ -493,7 +413,6 @@ void DrawOBB(const OBB& obb, const Matrix4x4& viewProjectionMatrix, const Matrix
 }
 
 void DrawAABB(const AABB& aabb, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
-	// 8つの頂点を定義
 	Vector3 vertices[8] = {
 	    {aabb.min.x, aabb.min.y, aabb.min.z}, // 0
 	    {aabb.max.x, aabb.min.y, aabb.min.z}, // 1
@@ -505,28 +424,26 @@ void DrawAABB(const AABB& aabb, const Matrix4x4& viewProjectionMatrix, const Mat
 	    {aabb.max.x, aabb.max.y, aabb.max.z}  // 7
 	};
 
-	// スクリーン座標に変換された頂点を格納する配列
 	Vector3 screenVertices[8];
 	for (int i = 0; i < 8; ++i) {
 		Matrix4x4 wvpVpMatrix = MyMathUtility::Multiply(viewProjectionMatrix, viewportMatrix);
 		screenVertices[i] = MyMathUtility::Transform(vertices[i], wvpVpMatrix);
 	}
 
-	// 12本の辺（インデックスペア）を描画
 	int indices[12][2] = {
 	    {0, 1},
         {1, 3},
         {3, 2},
-        {2, 0}, // 手前の面
-	    {4, 5},
+        {2, 0},
+        {4, 5},
         {5, 7},
         {7, 6},
-        {6, 4}, // 奥の面
-	    {0, 4},
+        {6, 4},
+        {0, 4},
         {1, 5},
         {2, 6},
-        {3, 7}  // 手前と奥を繋ぐ辺
-	};
+        {3, 7}
+    };
 
 	for (int i = 0; i < 12; ++i) {
 		Novice::DrawLine(
@@ -535,32 +452,24 @@ void DrawAABB(const AABB& aabb, const Matrix4x4& viewProjectionMatrix, const Mat
 	}
 }
 
-// 三角形の描画関数
 void DrawTriangle(const Triangle& triangle, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
 	Vector3 screenVertices[3];
 	for (int i = 0; i < 3; ++i) {
-		// 3次元座標をスクリーン座標系まで変換
 		Vector3 ndc = MyMathUtility::Transform(triangle.Vvertices[i], viewProjectionMatrix);
 		screenVertices[i] = MyMathUtility::Transform(ndc, viewportMatrix);
 	}
 
-	// Novice::DrawTriangle を利用してワイヤーフレームで描画
 	Novice::DrawTriangle(
 	    int(screenVertices[0].x), int(screenVertices[0].y), int(screenVertices[1].x), int(screenVertices[1].y), int(screenVertices[2].x), int(screenVertices[2].y), color, kFillModeWireFrame);
 }
 
-// 線分の描画関数
 void DrawSegment(const Segment& segment, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
-	// 始点
 	Vector3 start = segment.origin;
-	// 終点 = 始点 + 差分ベクトル
 	Vector3 end = MyMathUtility::Add(segment.origin, segment.diff);
 
-	// スクリーンの座標に変換
 	Vector3 screenStart = MyMathUtility::Transform(MyMathUtility::Transform(start, viewProjectionMatrix), viewportMatrix);
 	Vector3 screenEnd = MyMathUtility::Transform(MyMathUtility::Transform(end, viewProjectionMatrix), viewportMatrix);
 
-	// 線を描画
 	Novice::DrawLine(int(screenStart.x), int(screenStart.y), int(screenEnd.x), int(screenEnd.y), color);
 }
 
@@ -572,33 +481,26 @@ Vector3 Perpendicular(const Vector3& vector) {
 }
 
 void DrawPlane(const Plane& plane, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
-	// 1. 中心点を決める
 	Vector3 center = MyMathUtility::Multiply(plane.distance, plane.normal);
-
-	// 2〜5. 中心から伸びる4つの直交するベクトルを求める
 	Vector3 perpendiculars[4];
-	perpendiculars[0] = MyMathUtility::Normalize(Perpendicular(plane.normal));              // 2
-	perpendiculars[1] = {-perpendiculars[0].x, -perpendiculars[0].y, -perpendiculars[0].z}; // 3
-	perpendiculars[2] = MyMathUtility::Cross(plane.normal, perpendiculars[0]);              // 4
-	perpendiculars[3] = {-perpendiculars[2].x, -perpendiculars[2].y, -perpendiculars[2].z}; // 5
+	perpendiculars[0] = MyMathUtility::Normalize(Perpendicular(plane.normal));
+	perpendiculars[1] = {-perpendiculars[0].x, -perpendiculars[0].y, -perpendiculars[0].z};
+	perpendiculars[2] = MyMathUtility::Cross(plane.normal, perpendiculars[0]);
+	perpendiculars[3] = {-perpendiculars[2].x, -perpendiculars[2].y, -perpendiculars[2].z};
 
-	// 6. ベクトルを定数倍(今回は2.0f)して中心に足し、スクリーンの座標に変換する
 	Vector3 points[4];
 	for (int32_t index = 0; index < 4; ++index) {
-		Vector3 extend = MyMathUtility::Multiply(2.0f, perpendiculars[index]); // 2.0fの大きさの平面になる
+		Vector3 extend = MyMathUtility::Multiply(2.0f, perpendiculars[index]);
 		Vector3 point = MyMathUtility::Add(center, extend);
 		points[index] = MyMathUtility::Transform(MyMathUtility::Transform(point, viewProjectionMatrix), viewportMatrix);
 	}
 
-	// pointsをそれぞれ結んで DrawLine で矩形（ひし形）を描画する
-	// 0(右) -> 2(上) -> 1(左) -> 3(下) -> 0(右) の順に線を引く
 	Novice::DrawLine(int(points[0].x), int(points[0].y), int(points[2].x), int(points[2].y), color);
 	Novice::DrawLine(int(points[2].x), int(points[2].y), int(points[1].x), int(points[1].y), color);
 	Novice::DrawLine(int(points[1].x), int(points[1].y), int(points[3].x), int(points[3].y), color);
 	Novice::DrawLine(int(points[3].x), int(points[3].y), int(points[0].x), int(points[0].y), color);
 }
 
-// 軽量な球体描画関数
 void DrawMiniSphere(const Sphere& sphere, const Matrix4x4& viewProjectMatrix, const Matrix4x4& viewPortMatrix, uint32_t color) {
 	const uint32_t kSubdivision = 12;
 	const float kLonEvery = 2.0f * float(M_PI) / float(kSubdivision);
@@ -607,7 +509,6 @@ void DrawMiniSphere(const Sphere& sphere, const Matrix4x4& viewProjectMatrix, co
 	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex) {
 		float lat = -float(M_PI) / 2.0f + kLatEvery * latIndex;
 		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
-
 			float lon = lonIndex * kLonEvery;
 			Vector3 a = {sphere.radius * cosf(lat) * cosf(lon) + sphere.center.x, sphere.radius * sinf(lat) + sphere.center.y, sphere.radius * cosf(lat) * sinf(lon) + sphere.center.z};
 
@@ -627,7 +528,6 @@ void DrawMiniSphere(const Sphere& sphere, const Matrix4x4& viewProjectMatrix, co
 	}
 }
 
-// 床グリッド描画関数
 void DrawGrid(const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix) {
 	const float kGridHalfWidth = 5.0f;
 	const uint32_t kSubdivision = 10;
@@ -686,16 +586,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	float mouseSensitivity = 0.005f;
 
 	// ==================================================
-	// ばねの初期化処理
+	// 円運動・中心点の初期化処理
 	// ==================================================
-	Spring spring{};
-	spring.anchor = {0.0f, 0.0f, 0.0f};
-	spring.naturalLength = 1.0f;
-	spring.stiffness = 100.0f;
-	spring.dampingCoefficient = 2.0f;
+	// 描画用の原点(アンカー)
+	Vector3 origin = {0.0f, 0.0f, 0.0f};
+
+	// 円運動用の変数
+	float angle = 0.0f;
+	float angularVelocity = static_cast<float>(M_PI); // 1秒で半周(PIラジアン)する角速度
+	float radius = 1.2f;                              // 回転の半径
 
 	Ball ball{};
-	ball.position = {1.2f, 0.0f, 0.0f};
+	ball.position = {radius, 0.0f, 0.0f};
 	ball.velocity = {0.0f, 0.0f, 0.0f};
 	ball.acceleration = {0.0f, 0.0f, 0.0f};
 	ball.mass = 2.0f;
@@ -719,7 +621,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// ==================================================
 		// FPSスタイル・デバッグカメラ操作
 		// ==================================================
-
 		if (Novice::IsPressMouse(1)) {
 			if (isFirstClick) {
 				isFirstClick = false;
@@ -765,7 +666,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			cameraRotate = {0.45f, 0.0f, 0.0f};
 		}
 
-
 		// ===================================
 		// ImGui の処理
 		// ===================================
@@ -776,12 +676,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		ImGui::SameLine();
 		if (ImGui::Button("Reset")) {
 			isRunning = false;
-			ball.position = {1.2f, 0.0f, 0.0f};
-			ball.velocity = {0.0f, 0.0f, 0.0f};
-			ball.acceleration = {0.0f, 0.0f, 0.0f};
+			angle = 0.0f;
+			ball.position = {radius, 0.0f, 0.0f};
 		}
-		ImGui::DragFloat("Stiffness", &spring.stiffness, 1.0f, 0.0f, 1000.0f);
-		ImGui::DragFloat("Damping", &spring.dampingCoefficient, 0.01f, 0.0f, 50.0f);
+
+		// 円運動用のパラメータを調整できるように変更
+		ImGui::DragFloat("Angular Velocity", &angularVelocity, 0.1f, -10.0f, 10.0f);
+		ImGui::DragFloat("Radius", &radius, 0.1f, 0.1f, 10.0f);
 
 		ImGui::End();
 
@@ -791,24 +692,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		}
 
 		// ===================================
-		// ばねの物理演算
+		// 円運動の物理演算 (XY平面上)
 		// ===================================
 		if (isRunning) {
-			Vector3 diff = ball.position - spring.anchor;
-			// 算術ユーティリティに合わせて名前空間を変更[cite: 2]
-			float length = MyMathUtility::Length(diff);
-			if (length != 0.0f) {
-				Vector3 direction = MyMathUtility::Normalize(diff);
-				Vector3 restPosition = spring.anchor + direction * spring.naturalLength;
-				Vector3 displacement = ball.position - restPosition;
-				Vector3 restoringForce = -spring.stiffness * displacement;
-				Vector3 dampingForce = -spring.dampingCoefficient * ball.velocity;
-				Vector3 force = restoringForce + dampingForce;
-				ball.acceleration = force / ball.mass;
-			}
-			ball.velocity = ball.velocity + ball.acceleration * deltaTime;
-			ball.position = ball.position + ball.velocity * deltaTime;
+			// 角速度を用いて角度を更新[cite: 3]
+			angle += angularVelocity * deltaTime;
+
+			// XY平面上での等速円運動[cite: 3]
+			ball.position.x = origin.x + radius * std::cos(angle);
+			ball.position.y = origin.y + radius * std::sin(angle);
+			ball.position.z = origin.z; // Z軸は変動なし
 		}
+
+		// ===================================
+		// 描画処理
+		// ===================================
 
 		// ビュー・プロジェクション計算
 		Matrix4x4 cameraMatrix = MyMathUtility::MakeAffineMatrix({1.0f, 1.0f, 1.0f}, cameraRotate, cameraTranslate);
@@ -822,11 +720,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 描画
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
-		// アンカーとボールを繋ぐ線分 (ばね)
-		Segment springLine;
-		springLine.origin = spring.anchor;
-		springLine.diff = ball.position - spring.anchor;
-		DrawSegment(springLine, viewProjectionMatrix, viewportMatrix, WHITE);
+		// 原点とボールを繋ぐ線分
+		Segment line;
+		line.origin = origin;
+		line.diff = ball.position - origin;
+		DrawSegment(line, viewProjectionMatrix, viewportMatrix, WHITE);
 
 		// ボール
 		Sphere ballSphere;
