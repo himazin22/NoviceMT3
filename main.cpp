@@ -36,6 +36,22 @@ struct OBB {
 	Vector3 size;
 };
 
+struct Spring {
+	Vector3 anchor;
+	float naturalLength;
+	float stiffness;
+	float dampingCoefficient;
+};
+
+struct Ball {
+	Vector3 position;
+	Vector3 velocity;
+	Vector3 acceleration;
+	float mass;
+	float radius;
+	unsigned int color;
+};
+
 // ===================================
 // 演算子オーバーロードの定義
 // ===================================
@@ -669,21 +685,25 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	float cameraSpeed = 0.08f;
 	float mouseSensitivity = 0.005f;
 
-	// ---------------------------------------------------
-	// 提示された計算結果(c, d, e, matrix)を出力するための初期データ
-	// ---------------------------------------------------
-	// c と d の計算用 (連立方程式より逆算)
-	Vector3 v1 = {0.2f, 1.00004f, 0.000044f};
-	Vector3 v2 = {2.4f, 3.10004f, 1.200044f};
+	// ==================================================
+	// ばねの初期化処理
+	// ==================================================
+	Spring spring{};
+	spring.anchor = {0.0f, 0.0f, 0.0f};
+	spring.naturalLength = 1.0f;
+	spring.stiffness = 100.0f;
+	spring.dampingCoefficient = 2.0f;
 
-	// e の計算用
-	Vector3 v3 = {0.4f, 2.4f, 0.0f};
-	float k = 1.0f;
+	Ball ball{};
+	ball.position = {1.2f, 0.0f, 0.0f};
+	ball.velocity = {0.0f, 0.0f, 0.0f};
+	ball.acceleration = {0.0f, 0.0f, 0.0f};
+	ball.mass = 2.0f;
+	ball.radius = 0.05f;
+	ball.color = BLUE;
 
-	// 行列の計算用
-	Matrix4x4 m1 = {0.097770f, -0.100668f, -0.990180f, 0.000000f, 0.929354f, 0.365122f, 0.054648f, 0.000000f, 0.356008f, -0.925501f, 0.129254f, 0.000000f, 0.000000f, 0.000000f, 0.000000f, 1.000600f};
-
-	Matrix4x4 m2 = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+	bool isRunning = false;
+	float deltaTime = 1.0f / 60.0f;
 
 	while (Novice::ProcessMessage() == 0) {
 		Novice::BeginFrame();
@@ -745,30 +765,50 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			cameraRotate = {0.45f, 0.0f, 0.0f};
 		}
 
-		// ---------------------------------------------------
-		// 演算子オーバーロードを使用した計算
-		// ---------------------------------------------------
-		Vector3 c = v1 + v2;
-		Vector3 d = v1 - v2;
-		Vector3 e = v3 * k;
-		Matrix4x4 matrix = m1 * m2;
 
 		// ===================================
-		// ImGui の処理 (ご要望のフォーマット)
+		// ImGui の処理
 		// ===================================
-
 		ImGui::Begin("Window");
-
-		ImGui::Text("c:%f, %f, %f", c.x, c.y, c.z);
-		ImGui::Text("d:%f, %f, %f", d.x, d.y, d.z);
-		ImGui::Text("e:%f, %f, %f", e.x, e.y, e.z);
-		ImGui::Text("matrix:");
-		ImGui::Text("%f, %f, %f, %f", matrix.m[0][0], matrix.m[0][1], matrix.m[0][2], matrix.m[0][3]);
-		ImGui::Text("%f, %f, %f, %f", matrix.m[1][0], matrix.m[1][1], matrix.m[1][2], matrix.m[1][3]);
-		ImGui::Text("%f, %f, %f, %f", matrix.m[2][0], matrix.m[2][1], matrix.m[2][2], matrix.m[2][3]);
-		ImGui::Text("%f, %f, %f, %f", matrix.m[3][0], matrix.m[3][1], matrix.m[3][2], matrix.m[3][3]);
+		if (ImGui::Button("Start")) {
+			isRunning = true;
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Reset")) {
+			isRunning = false;
+			ball.position = {1.2f, 0.0f, 0.0f};
+			ball.velocity = {0.0f, 0.0f, 0.0f};
+			ball.acceleration = {0.0f, 0.0f, 0.0f};
+		}
+		ImGui::DragFloat("Stiffness", &spring.stiffness, 1.0f, 0.0f, 1000.0f);
+		ImGui::DragFloat("Damping", &spring.dampingCoefficient, 0.01f, 0.0f, 50.0f);
 
 		ImGui::End();
+
+		// Eキーで開始
+		if (preKeys[DIK_E] == 0 && keys[DIK_E] != 0) {
+			isRunning = true;
+		}
+
+		// ===================================
+		// ばねの物理演算
+		// ===================================
+		if (isRunning) {
+			Vector3 diff = ball.position - spring.anchor;
+			// 算術ユーティリティに合わせて名前空間を変更[cite: 2]
+			float length = MyMathUtility::Length(diff);
+			if (length != 0.0f) {
+				Vector3 direction = MyMathUtility::Normalize(diff);
+				Vector3 restPosition = spring.anchor + direction * spring.naturalLength;
+				Vector3 displacement = ball.position - restPosition;
+				Vector3 restoringForce = -spring.stiffness * displacement;
+				Vector3 dampingForce = -spring.dampingCoefficient * ball.velocity;
+				Vector3 force = restoringForce + dampingForce;
+				ball.acceleration = force / ball.mass;
+			}
+			ball.velocity = ball.velocity + ball.acceleration * deltaTime;
+			ball.position = ball.position + ball.velocity * deltaTime;
+		}
 
 		// ビュー・プロジェクション計算
 		Matrix4x4 cameraMatrix = MyMathUtility::MakeAffineMatrix({1.0f, 1.0f, 1.0f}, cameraRotate, cameraTranslate);
@@ -781,6 +821,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 		// 描画
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
+
+		// アンカーとボールを繋ぐ線分 (ばね)
+		Segment springLine;
+		springLine.origin = spring.anchor;
+		springLine.diff = ball.position - spring.anchor;
+		DrawSegment(springLine, viewProjectionMatrix, viewportMatrix, WHITE);
+
+		// ボール
+		Sphere ballSphere;
+		ballSphere.center = ball.position;
+		ballSphere.radius = ball.radius;
+		DrawMiniSphere(ballSphere, viewProjectionMatrix, viewportMatrix, ball.color);
 
 		Novice::EndFrame();
 
