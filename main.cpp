@@ -40,6 +40,9 @@ struct OBB {
 // 演算子オーバーロードの定義
 // ===================================
 
+// Vector3 の単項マイナス (-Vector3)
+Vector3 operator-(const Vector3& v) { return {-v.x, -v.y, -v.z}; }
+
 // Vector3 の加算 (Vector3 + Vector3)
 Vector3 operator+(const Vector3& v1, const Vector3& v2) { return {v1.x + v2.x, v1.y + v2.y, v1.z + v2.z}; }
 
@@ -51,6 +54,15 @@ Vector3 operator*(const Vector3& v, float s) { return {v.x * s, v.y * s, v.z * s
 
 // Vector3 のスカラー倍 (float * Vector3)
 Vector3 operator*(float s, const Vector3& v) { return {v.x * s, v.y * s, v.z * s}; }
+
+// Vector3 のスカラー除算 (Vector3 / float)
+Vector3 operator/(const Vector3& v, float s) { return {v.x / s, v.y / s, v.z / s}; }
+
+// Matrix4x4 の加算 (Matrix4x4 + Matrix4x4)
+Matrix4x4 operator+(const Matrix4x4& m1, const Matrix4x4& m2) { return MyMathUtility::Add(m1, m2); }
+
+// Matrix4x4 の減算 (Matrix4x4 - Matrix4x4)
+Matrix4x4 operator-(const Matrix4x4& m1, const Matrix4x4& m2) { return MyMathUtility::Subtract(m1, m2); }
 
 // Matrix4x4 の積 (Matrix4x4 * Matrix4x4)
 Matrix4x4 operator*(const Matrix4x4& m1, const Matrix4x4& m2) { return MyMathUtility::Multiply(m1, m2); }
@@ -655,23 +667,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Vector3 cameraTranslate{0.0f, 4.0f, -10.0f};
 	Vector3 cameraRotate{0.45f, 0.0f, 0.0f};
 	float cameraSpeed = 0.08f;
-	float mouseSensitivity = 0.005f; // マウスの感度調整
-	                                 // 階層構造（肩・肘・手）の初期値
+	float mouseSensitivity = 0.005f;
+
 	// ---------------------------------------------------
-	// 提示された計算結果(c, d, e, matrix)を再現するための初期データ
+	// 提示された計算結果(c, d, e, matrix)を出力するための初期データ
 	// ---------------------------------------------------
-	// c と d の計算用
-	Vector3 v1 = {0.2f, 1.040004f, 0.0f};
-	Vector3 v2 = {2.4f, 3.140004f, 1.2f};
+	// c と d の計算用 (連立方程式より逆算)
+	Vector3 v1 = {0.2f, 1.00004f, 0.000044f};
+	Vector3 v2 = {2.4f, 3.10004f, 1.200044f};
 
 	// e の計算用
-	Vector3 v3 = {0.480800f, 2.480000f, 0.0f};
+	Vector3 v3 = {0.4f, 2.4f, 0.0f};
 	float k = 1.0f;
 
-	// 行列の計算用 (4行1列目を 0.000000f に修正)
-	Matrix4x4 m1 = {
-	    0.097770f, -0.108668f, -0.990105f, 0.000000f, 0.929354f, 0.365122f, 0.054648f, 0.000000f, 0.356008f, -0.925501f, 0.129254f, 0.000000f, 0.000000f, 0.000000f, 0.000000f, 1.000000f 
-	};
+	// 行列の計算用
+	Matrix4x4 m1 = {0.097770f, -0.100668f, -0.990180f, 0.000000f, 0.929354f, 0.365122f, 0.054648f, 0.000000f, 0.356008f, -0.925501f, 0.129254f, 0.000000f, 0.000000f, 0.000000f, 0.000000f, 1.000600f};
 
 	Matrix4x4 m2 = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f};
 
@@ -687,10 +697,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		Novice::GetMousePosition(&currentMouseX, &currentMouseY);
 
 		// ==================================================
-		// 🛠️ FPSスタイル・デバッグカメラ操作 (WASD + マウス)
+		// FPSスタイル・デバッグカメラ操作
 		// ==================================================
 
-		// 1. マウスの右クリックドラッグによる視点変更
 		if (Novice::IsPressMouse(1)) {
 			if (isFirstClick) {
 				isFirstClick = false;
@@ -739,23 +748,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// ---------------------------------------------------
 		// 演算子オーバーロードを使用した計算
 		// ---------------------------------------------------
-		Vector3 c = v1 + v2;        // ★ここで「operator+」が呼び出されています！
-		Vector3 d = v1 - v2;        // ★ここで「operator-」が呼び出されています！
-		Vector3 e = v3 * k;         // ★ここで「operator*」が呼び出されています！
-		Matrix4x4 matrix = m1 * m2; // ★ここで「operator*」が呼び出されています！
+		Vector3 c = v1 + v2;
+		Vector3 d = v1 - v2;
+		Vector3 e = v3 * k;
+		Matrix4x4 matrix = m1 * m2;
 
 		// ===================================
-		// ImGui の処理
+		// ImGui の処理 (ご要望のフォーマット)
 		// ===================================
 
 		ImGui::Begin("Window");
 
-		// ベクトルの計算結果表示
 		ImGui::Text("c:%f, %f, %f", c.x, c.y, c.z);
 		ImGui::Text("d:%f, %f, %f", d.x, d.y, d.z);
 		ImGui::Text("e:%f, %f, %f", e.x, e.y, e.z);
-
-		// 行列の計算結果表示
 		ImGui::Text("matrix:");
 		ImGui::Text("%f, %f, %f, %f", matrix.m[0][0], matrix.m[0][1], matrix.m[0][2], matrix.m[0][3]);
 		ImGui::Text("%f, %f, %f, %f", matrix.m[1][0], matrix.m[1][1], matrix.m[1][2], matrix.m[1][3]);
