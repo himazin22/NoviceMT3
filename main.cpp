@@ -580,9 +580,7 @@ void DrawGrid(const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMa
 	}
 }
 
-Vector3 Reflect(const Vector3& input, const Vector3& normal) {
-
-}
+Vector3 Reflect(const Vector3& input, const Vector3& normal) { return input - 2.0f * MyMathUtility::Dot(input, normal) * normal; }
 
 const char kWindowTitle[] = "LC1C_22_ツノダ_タケマサ_タイトル";
 
@@ -606,27 +604,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	float mouseSensitivity = 0.005f;
 
 	// ==================================================
-	// 円錐振り子の初期化処理 (資料記載の初期値)
+	// 平面とボールの初期化処理 (資料記載の初期値)
 	// ==================================================
-	ConicalPendulum conicalPendulum;
-	conicalPendulum.anchor = {0.0f, 1.0f, 0.0f};
-	conicalPendulum.length = 0.8f;
-	conicalPendulum.halfApexAngle = 0.7f;
-	conicalPendulum.angle = 0.0f;
-	conicalPendulum.angularVelocity = 0.0f;
+	Plane plane;
+	plane.normal = MyMathUtility::Normalize({-0.2f, 0.9f, -0.3f});
+	plane.distance = 0.0f;
 
+	const Vector3 kInitialBallPosition = {0.8f, 1.2f, 0.3f};
 	Ball ball{};
+	ball.position = kInitialBallPosition;
+	ball.velocity = {0.0f, 0.0f, 0.0f};
+	ball.acceleration = {0.0f, -9.8f, 0.0f};
 	ball.mass = 2.0f;
-	ball.radius = 0.1f;
-	ball.color = BLUE;
+	ball.radius = 0.05f;
+	ball.color = WHITE;
 
-// 初期のボブ（球）の位置計算
-	float radius = std::sin(conicalPendulum.halfApexAngle) * conicalPendulum.length;
-	float height = std::cos(conicalPendulum.halfApexAngle) * conicalPendulum.length;
-	ball.position.x = conicalPendulum.anchor.x + std::cos(conicalPendulum.angle) * radius;
-	ball.position.y = conicalPendulum.anchor.y - height;
-	ball.position.z = conicalPendulum.anchor.z - std::sin(conicalPendulum.angle) * radius;
-
+	// 反発係数
+	float e = 0.8f;
 	bool isRunning = false;
 	float deltaTime = 1.0f / 60.0f;
 
@@ -692,7 +686,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// ===================================
 		// ImGui の処理
 		// ===================================
-		ImGui::Begin("Conical Pendulum Control");
+		ImGui::Begin("Ball & Plane Simulation");
 
 		if (ImGui::Button("Start")) {
 			isRunning = true;
@@ -700,15 +694,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		ImGui::SameLine();
 		if (ImGui::Button("Reset")) {
 			isRunning = false;
-			conicalPendulum.angle = 0.0f;
-			conicalPendulum.angularVelocity = 0.0f;
+			ball.position = kInitialBallPosition;
+			ball.velocity = {0.0f, 0.0f, 0.0f};
 		}
 
-		// 円錐振り子のパラメータ調整 UI
-		ImGui::DragFloat3("Anchor", &conicalPendulum.anchor.x, 0.01f);
-		ImGui::DragFloat("Length", &conicalPendulum.length, 0.01f, 0.1f, 10.0f);
-		// halfApexAngleは0より大きく、π/2（90度）未満に制限
-		ImGui::SliderFloat("Half Apex Angle", &conicalPendulum.halfApexAngle, 0.01f, float(M_PI_2) - 0.01f);
+		ImGui::SliderFloat("Coefficient of Restitution (e)", &e, 0.0f, 1.0f);
+		ImGui::DragFloat3("Ball Position", &ball.position.x, 0.01f);
+		ImGui::DragFloat3("Plane Normal", &plane.normal.x, 0.01f);
+		plane.normal = MyMathUtility::Normalize(plane.normal); // 常時正規化
 
 		ImGui::End();
 
@@ -721,22 +714,22 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 円運動の物理演算 (XY平面上)
 		// ===================================
 		if (isRunning) {
-			// 1. 角速度を計算
-			conicalPendulum.angularVelocity = std::sqrt(9.8f / (conicalPendulum.length * std::cos(conicalPendulum.halfApexAngle)));
+			// 1. 速度と位置の更新
+			ball.velocity = ball.velocity + ball.acceleration * deltaTime;
+			ball.position = ball.position + ball.velocity * deltaTime;
 
-			// 2. 現在の角度に加算
-			conicalPendulum.angle += conicalPendulum.angularVelocity * deltaTime;
-		
+			// 2. 球と平面の衝突判定
+			if (IsCollision(Sphere{ball.position, ball.radius}, plane)) {
+				// 反射ベクトルを求める
+				Vector3 reflected = Reflect(ball.velocity, plane.normal);
+				// 法線方向の速度成分を取り出す
+				Vector3 projectToNormal = MyMathUtility::Project(reflected, plane.normal);
+				// 接線方向（移動方向）の速度成分を取り出す
+				Vector3 movingDirection = reflected - projectToNormal;
+				// 法線方向のみ反発係数 e で減衰させて新しい速度を設定
+				ball.velocity = projectToNormal * e + movingDirection;
+			}
 		}
-
-		// 3. 半径と高さからボブ（球）の位置を更新
-		radius = std::sin(conicalPendulum.halfApexAngle) * conicalPendulum.length;
-		height = std::cos(conicalPendulum.halfApexAngle) * conicalPendulum.length;
-
-		ball.position.x = conicalPendulum.anchor.x + std::cos(conicalPendulum.angle) * radius;
-		ball.position.y = conicalPendulum.anchor.y - height;
-		ball.position.z = conicalPendulum.anchor.z - std::sin(conicalPendulum.angle) * radius;
-
 		// ===================================
 		// 描画処理
 		// ===================================
@@ -753,18 +746,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 描画
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
-		// 紐（アンカーから先端までの線分）の描画
-		// 紐（アンカーからボブの位置までの線分）の描画
-		Segment line;
-		line.origin = conicalPendulum.anchor;
-		line.diff = ball.position - conicalPendulum.anchor;
-		DrawSegment(line, viewProjectionMatrix, viewportMatrix, WHITE);
+		DrawPlane(plane, viewProjectionMatrix, viewportMatrix, WHITE);
 
-		// 先端のボールの描画
-		Sphere ballSphere;
-		ballSphere.center = ball.position;
-		ballSphere.radius = ball.radius;
+		Sphere ballSphere{ball.position, ball.radius};
 		DrawMiniSphere(ballSphere, viewProjectionMatrix, viewportMatrix, ball.color);
+
 		Novice::EndFrame();
 
 		if (preKeys[DIK_ESCAPE] == 0 && keys[DIK_ESCAPE] != 0) {
