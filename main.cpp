@@ -52,6 +52,14 @@ struct Ball {
 	unsigned int color;
 };
 
+struct Pendulum {
+	Vector3 anchor;
+	float length;
+	float angle;
+	float angularVelocity;
+	float angularAcceleration;
+};
+
 // ===================================
 // 演算子オーバーロードの定義
 // ===================================
@@ -586,23 +594,24 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	float mouseSensitivity = 0.005f;
 
 	// ==================================================
-	// 円運動・中心点の初期化処理
+	// 振り子の初期化処理 (資料記載の初期値)
 	// ==================================================
-	// 描画用の原点(アンカー)
-	Vector3 origin = {0.0f, 0.0f, 0.0f};
-
-	// 円運動用の変数
-	float angle = 0.0f;
-	float angularVelocity = static_cast<float>(M_PI); // 1秒で半周(PIラジアン)する角速度
-	float radius = 0.8f;                              // 回転の半径
+	Pendulum pendulum;
+	pendulum.anchor = {0.0f, 1.0f, 0.0f};
+	pendulum.length = 0.8f;
+	pendulum.angle = 0.7f;
+	pendulum.angularVelocity = 0.0f;
+	pendulum.angularAcceleration = 0.0f;
 
 	Ball ball{};
-	ball.position = {radius, 0.0f, 0.0f};
-	ball.velocity = {0.0f, 0.0f, 0.0f};
-	ball.acceleration = {0.0f, 0.0f, 0.0f};
 	ball.mass = 2.0f;
-	ball.radius = 0.05f;
+	ball.radius = 0.1f;
 	ball.color = BLUE;
+
+	// 初期位置の設定
+	ball.position.x = pendulum.anchor.x + std::sin(pendulum.angle) * pendulum.length;
+	ball.position.y = pendulum.anchor.y - std::cos(pendulum.angle) * pendulum.length;
+	ball.position.z = pendulum.anchor.z;
 
 	bool isRunning = false;
 	float deltaTime = 1.0f / 60.0f;
@@ -669,20 +678,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// ===================================
 		// ImGui の処理
 		// ===================================
-		ImGui::Begin("Window");
+		ImGui::Begin("Pendulum Control");
+
 		if (ImGui::Button("Start")) {
 			isRunning = true;
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Reset")) {
 			isRunning = false;
-			angle = 0.0f;
-			ball.position = {radius, 0.0f, 0.0f};
+			pendulum.angle = 0.7f;
+			pendulum.angularVelocity = 0.0f;
+			pendulum.angularAcceleration = 0.0f;
 		}
 
-		// 円運動用のパラメータを調整できるように変更
-		ImGui::DragFloat("Angular Velocity", &angularVelocity, 0.1f, -10.0f, 10.0f);
-		ImGui::DragFloat("Radius", &radius, 0.1f, 0.1f, 10.0f);
+		// 振り子のパラメータ調整
+		ImGui::DragFloat3("Anchor", &pendulum.anchor.x, 0.01f);
+		ImGui::DragFloat("Length", &pendulum.length, 0.01f, 0.1f, 10.0f);
+		ImGui::DragFloat("Angle", &pendulum.angle, 0.01f, -float(M_PI), float(M_PI));
 
 		ImGui::End();
 
@@ -695,14 +707,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 円運動の物理演算 (XY平面上)
 		// ===================================
 		if (isRunning) {
-			// 角速度を用いて角度を更新[cite: 3]
-			angle += angularVelocity * deltaTime;
-
-			// XY平面上での等速円運動[cite: 3]
-			ball.position.x = origin.x + radius * std::cos(angle);
-			ball.position.y = origin.y + radius * std::sin(angle);
-			ball.position.z = origin.z; // Z軸は変動なし
+			// 角加速度の計算
+			pendulum.angularAcceleration = -(9.8f / pendulum.length) * std::sin(pendulum.angle);
+			// 角速度の更新
+			pendulum.angularVelocity += pendulum.angularAcceleration * deltaTime;
+			// 角度の更新
+			pendulum.angle += pendulum.angularVelocity * deltaTime;
 		}
+
+		// ボール（先端）の位置の更新
+		ball.position.x = pendulum.anchor.x + std::sin(pendulum.angle) * pendulum.length;
+		ball.position.y = pendulum.anchor.y - std::cos(pendulum.angle) * pendulum.length;
+		ball.position.z = pendulum.anchor.z;
 
 		// ===================================
 		// 描画処理
@@ -720,18 +736,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// 描画
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
-		// 原点とボールを繋ぐ線分
+		// 紐（アンカーから先端までの線分）の描画
 		Segment line;
-		line.origin = origin;
-		line.diff = ball.position - origin;
+		line.origin = pendulum.anchor;
+		line.diff = ball.position - pendulum.anchor;
 		DrawSegment(line, viewProjectionMatrix, viewportMatrix, WHITE);
 
-		// ボール
+		// 先端のボールの描画
 		Sphere ballSphere;
 		ballSphere.center = ball.position;
 		ballSphere.radius = ball.radius;
 		DrawMiniSphere(ballSphere, viewProjectionMatrix, viewportMatrix, ball.color);
-
 		Novice::EndFrame();
 
 		if (preKeys[DIK_ESCAPE] == 0 && keys[DIK_ESCAPE] != 0) {
