@@ -580,6 +580,10 @@ void DrawGrid(const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMa
 	}
 }
 
+Vector3 Reflect(const Vector3& input, const Vector3& normal) {
+
+}
+
 const char kWindowTitle[] = "LC1C_22_ツノダ_タケマサ_タイトル";
 
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
