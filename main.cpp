@@ -594,7 +594,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// 円運動用の変数
 	float angle = 0.0f;
 	float angularVelocity = static_cast<float>(M_PI); // 1秒で半周(PIラジアン)する角速度
-	float radius = 1.2f;                              // 回転の半径
+	float radius = 0.8f;                              // 回転の半径
 
 	Ball ball{};
 	ball.position = {radius, 0.0f, 0.0f};
